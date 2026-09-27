@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#05080d" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
+    <title>Smth I Wrote Today — Hacia la luz</title>
+  </head>
+  <body>
+    <main>
+      <canvas id="scene" tabindex="0" aria-label="Túnel hacia un jardín de mariposas. WASD para volar, arrastrar para mirar, Espacio y Alt para subir y bajar. Mantén E y suelta para llamar y rescatar mariposas."></canvas>
+      <button id="settings-toggle" class="settings-toggle" type="button" aria-label="Abrir ajustes" aria-expanded="false" aria-controls="settings-panel" title="Ajustes">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.28 7.28 0 0 0-1.63-.94l-.36-2.5a.49.49 0 0 0-.5-.42h-3.84a.49.49 0 0 0-.5.42l-.36 2.5c-.59.23-1.13.55-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.62 8.82a.5.5 0 0 0 .12.64l2.03 1.58a6 6 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.21.37.29.61.22l2.39-.96c.5.39 1.04.71 1.63.94l.36 2.5c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.5c.59-.23 1.13-.55 1.63-.94l2.39.96c.24.1.49-.01.61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" />
+        </svg>
+      </button>
+      <section id="settings-panel" class="settings-panel" aria-label="Ajustes" hidden>
+        <div class="setting-row">
+          <div class="setting-heading">
+            <label for="camera-sensitivity">Sensibilidad de cámara</label>
+            <output id="camera-sensitivity-value" for="camera-sensitivity">1,00×</output>
+          </div>
+          <input id="camera-sensitivity" type="range" min="0.1" max="2.5" step="0.05" value="1" />
+        </div>
+        <div class="setting-row">
+          <div class="setting-heading">
+            <label for="music-volume">Volumen de música</label>
+            <output id="music-volume-value" for="music-volume">100 %</output>
+          </div>
+          <input id="music-volume" type="range" min="0" max="100" step="1" value="100" />
+        </div>
+        <div class="setting-row">
+          <div class="setting-heading">
+            <label for="sky-video-opacity">Opacidad del vídeo del cielo</label>
+            <output id="sky-video-opacity-value" for="sky-video-opacity">12 %</output>
+          </div>
+          <input id="sky-video-opacity" type="range" min="0" max="30" step="1" value="12" />
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
