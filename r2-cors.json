@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": [
+          "https://youchosethis.sarda0x.com",
+          "https://youchosethis.netlify.app"
+        ],
+        "methods": ["GET", "HEAD"],
+        "headers": ["Range", "If-Range"]
+      },
+      "exposeHeaders": ["Accept-Ranges", "Content-Length", "Content-Range", "ETag"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

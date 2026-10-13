@@ -1,3 +1,5 @@
+import { mediaUrl } from './mediaUrl.js';
+
 export const DEFAULT_SKY_VIDEO_OPACITY = .12;
 export const MAX_SKY_VIDEO_OPACITY = .30;
 export const SKY_VIDEO_FADE_SECONDS = 1.8;
@@ -97,12 +99,13 @@ export function createSkyVideo(audio, calibration) {
   const videos = [0, 1].map(index => {
     const video = document.createElement('video');
     video.id = index === 0 ? 'heaven-sky-video' : 'heaven-sky-video-buffer';
+    video.crossOrigin = 'anonymous';
     video.muted = true;
     video.defaultMuted = true;
     video.playsInline = true;
     video.preload = 'auto';
     video.hidden = true;
-    video.src = '/heaven-sky.mp4';
+    video.src = mediaUrl('/video/heaven-sky.mp4', { localPath: '/heaven-sky.mp4' });
     document.body.append(video);
     return video;
   });

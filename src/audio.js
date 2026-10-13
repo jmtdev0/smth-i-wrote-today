@@ -6,7 +6,9 @@ export function fadeVolume(elapsedSeconds, maxVolume, fadeSeconds = DEFAULT_FADE
 }
 
 export function createLoopingAudio(src, { maxVolume = .18, fadeInSeconds = DEFAULT_FADE_SECONDS } = {}) {
-  const audio = new Audio(src);
+  const audio = new Audio();
+  audio.crossOrigin = 'anonymous';
+  audio.src = src;
   audio.loop = true;
   audio.preload = 'auto';
   audio.volume = 0;

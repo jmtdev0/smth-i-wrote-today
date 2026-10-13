@@ -14,6 +14,7 @@ import { advanceAltitude, cameraRelativeMovement, BUTTERFLY_VERTICAL_SPEED } fro
 import { CAMERA_PITCH_LIMIT } from './angles.js';
 import { createCameraView, FIRST_PERSON_DISTANCE } from './CameraView.js';
 import { createLoopingAudio } from './audio.js';
+import { mediaUrl } from './mediaUrl.js';
 import { resolveStartPosition } from './startPosition.js';
 import { createSkyVideo, DEFAULT_SKY_VIDEO_OPACITY, MAX_SKY_VIDEO_OPACITY, skyVideoOpacity } from './SkyVideo.js';
 import './style.css';
@@ -33,7 +34,17 @@ const skyVideoOpacityValue = document.querySelector('#sky-video-opacity-value');
 const SETTINGS_STORAGE_KEY = 'smth-i-wrote-today-settings-v1';
 const DEFAULT_SETTINGS = Object.freeze({ cameraSensitivity: 1, musicVolume: 1, effectsVolume: 1, skyVideoOpacity: DEFAULT_SKY_VIDEO_OPACITY });
 const settings = loadSettings();
-const ambientAudio = createLoopingAudio('/emelie%20trahan%20-%20you%20chose%20this.mp3', { maxVolume: settings.musicVolume, fadeInSeconds: 2.5 });
+if (!import.meta.env?.VITE_MEDIA_BASE_URL) {
+  const favicon = document.createElement('link');
+  favicon.rel = 'icon';
+  favicon.type = 'image/png';
+  favicon.sizes = '64x64';
+  favicon.href = '/favicon.png';
+  document.head.append(favicon);
+}
+const ambientAudio = createLoopingAudio(mediaUrl('/music/you-chose-this.mp3', {
+  localPath: '/emelie%20trahan%20-%20you%20chose%20this.mp3',
+}), { maxVolume: settings.musicVolume, fadeInSeconds: 2.5 });
 const skyVideo = createSkyVideo(ambientAudio.audio, { rate: .88, offset: 2.25 });
 const skyVideoTextures = skyVideo.videos.map(video => {
   const texture = new THREE.VideoTexture(video);
@@ -55,14 +66,14 @@ const cameraView = createCameraView({ maxDistance: MAX_CAMERA_DISTANCE });
 const tunnel = createTunnelWorld();
 const paradise = createButterflyParadise();
 scene.add(tunnel.group, paradise.group);
-const skyApparitionTexture = new THREE.TextureLoader().load(
+const skyApparitionTexture = import.meta.env?.VITE_MEDIA_BASE_URL ? null : new THREE.TextureLoader().load(
   '/1dad95b9-3fb0-4e1a-9c5a-662cc640537c_1758672000.jpeg',
   texture => {
     if (disposed) { texture.dispose(); return; }
     renderer.initTexture(texture);
     paradise.setSkyImage(texture, texture.image.width / texture.image.height);
   }, undefined, () => console.warn('No se pudo cargar la imagen ocasional del cielo.'));
-skyApparitionTexture.colorSpace = THREE.SRGBColorSpace;
+if (skyApparitionTexture) skyApparitionTexture.colorSpace = THREE.SRGBColorSpace;
 const lighting = createHeavenLighting(scene, renderer);
 const butterfly = createButterfly({ whiteness: 1, alwaysWhite: true });
 butterfly.group.scale.setScalar(.48);
@@ -397,7 +408,7 @@ if (import.meta.hot) import.meta.hot.dispose(() => {
   lighting.dispose();
   skyVideo.dispose();
   for (const texture of skyVideoTextures) texture.dispose();
-  skyApparitionTexture.dispose();
+  skyApparitionTexture?.dispose();
   ambientAudio.audio.pause();
   renderer.dispose();
 });
