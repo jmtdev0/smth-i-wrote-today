@@ -1,3 +1,26 @@
+import { MAX_CHIRP_CHARGE_SECONDS } from './resonance.js';
+
+// Independent holds retain their intent until release. Cancelling a menu,
+// focus loss or a disconnected controller must never emit a delayed call.
+export function createChirpButtons(onChirp) {
+  const held = new Map();
+  const charge = (start, now) => Math.max(0, Math.min(1, (now - start) / (MAX_CHIRP_CHARGE_SECONDS * 1000)));
+  return {
+    down(id, now, recruit) { if (!held.has(id)) held.set(id, { start: now, recruit }); },
+    up(id, now) {
+      const hold = held.get(id);
+      held.delete(id);
+      if (hold) onChirp(charge(hold.start, now), { recruit: hold.recruit });
+    },
+    charge(now) {
+      let maximum = 0;
+      for (const hold of held.values()) maximum = Math.max(maximum, charge(hold.start, now));
+      return maximum;
+    },
+    cancel(prefix = '') { for (const id of held.keys()) if (id.startsWith(prefix)) held.delete(id); },
+  };
+}
+
 // Only two short, stationary, single-finger taps count as a call. Camera drags,
 // pinches and cancelled pointers invalidate the gesture.
 export function createChirpGesture(onChirp) {

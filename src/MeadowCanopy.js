@@ -14,7 +14,7 @@ export function createMeadowCanopy(terrainGeometry, meadowLife) {
   meadowLife.applyToMaterial(material);
   const compileMeadow = material.onBeforeCompile;
   const rootColor = new THREE.Color('#648649'), tipColor = new THREE.Color('#b4ca75');
-  material.customProgramCacheKey = () => 'heaven-continuous-grass-canopy-v4-wingwind';
+  material.customProgramCacheKey = () => 'heaven-continuous-grass-canopy-v5-arrival';
   material.onBeforeCompile = shader => {
     compileMeadow(shader);
     shader.vertexShader = `uniform float uMeadowTime, uMeadowLife;
@@ -114,7 +114,9 @@ export function createMeadowCanopy(terrainGeometry, meadowLife) {
       // Bottom-to-top slices blend filtered coverage instead of a noisy
       // screen-space stipple, retaining the velvety distant grass surface.
       if (coverage < .01) discard;
-      diffuseColor.a *= coverage;
+      // Readiness must fade coverage too, not just grow the slice heights.
+      // Otherwise all sixteen layers suddenly tint the ground at activation.
+      diffuseColor.a *= coverage * uMeadowLife;
       float fieldMix = .5 + .5 * sin(vMeadowWorld.x * .045 + vMeadowWorld.z * .025);
       vec3 grass = mix(vec3(${rootColor.toArray().join(',')}), vec3(${tipColor.toArray().join(',')}), vCanopyLevel * .8 + fieldMix * .15);
       // Coarser leaves have independently jittered roots, orientation and
@@ -122,7 +124,9 @@ export function createMeadowCanopy(terrainGeometry, meadowLife) {
       vec2 tuftRoot = warpedRoot - bend * .5;
       float strands = canopyStroke(tuftRoot * vec2(1.8, .62)) - .11;
       grass *= 1. + strands * .58;
-      diffuseColor.rgb *= grass * mix(.77, 1.08, vCanopyLevel);
+      vec3 ground = mix(vec3(${new THREE.Color('#89ab76').toArray().join(',')}),
+        vec3(${new THREE.Color('#c6d69b').toArray().join(',')}), fieldMix * .6);
+      diffuseColor.rgb *= mix(ground, grass * mix(.77, 1.08, vCanopyLevel), uMeadowLife);
     `);
   };
   // Share the actual terrain positions, so recycling carries every slice
@@ -130,6 +134,7 @@ export function createMeadowCanopy(terrainGeometry, meadowLife) {
   const mesh = new THREE.InstancedMesh(terrainGeometry, material, CANOPY_LAYERS);
   mesh.name = 'Continuous meadow grass canopy';
   mesh.frustumCulled = false;
+  mesh.receiveShadow = true;
   mesh.renderOrder = -1;
   const matrix = new THREE.Matrix4();
   for (let i = 0; i < CANOPY_LAYERS; i++) {

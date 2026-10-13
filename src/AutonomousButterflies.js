@@ -8,6 +8,9 @@ import {
 import { BUTTERFLY_VERTICAL_SPEED } from './flight.js';
 import { CHIRP_RADIUS, MAX_CHIRP_RADIUS, CHIRP_COOLDOWN, createResonanceCharge } from './resonance.js';
 import { TUNNEL_START, TUNNEL_EXIT_Z, constrainTunnelPosition, tunnelDaylight, createButterflyLantern } from './TunnelWorld.js';
+import { heavenFlightPosition } from './HeavenChoreography.js';
+import { meadowSurfaceHeight } from './MeadowSurface.js';
+import { companionTarget, releaseIntoOrbit } from './CompanionFlight.js';
 
 export const AUTONOMOUS_BUTTERFLY_COUNT = 6;
 export const AUTONOMOUS_FLIGHT_SPEED = BUTTERFLY_VERTICAL_SPEED;
@@ -82,7 +85,8 @@ export function createAutonomousButterflies(count = AUTONOMOUS_BUTTERFLY_COUNT, 
     roam(profile, 0, HYPERBOLOID_POSITION, butterfly.group.position);
     const lantern = tunnel ? createButterflyLantern() : null;
     if (lantern) group.add(lantern.group);
-    agents.push({ butterfly, profile, connected: false, slot: -1, whiteness: 0,
+    agents.push({ butterfly, profile, connected: false, slot: -1, whiteness: 0, freed: false,
+      freeFlight: { x: 0, y: 0, z: 0, phase: profile.phase, speed: .2, orbit: 7 + index % 3 },
       lantern, tint: new THREE.Color('#ffffff'), targetTint: new THREE.Color('#ffffff'),
       velocity: new THREE.Vector3(), charge: createResonanceCharge() });
   }
@@ -102,10 +106,11 @@ export function createAutonomousButterflies(count = AUTONOMOUS_BUTTERFLY_COUNT, 
     get connectedCount() { return connectedCount; },
     boost: time => playerCharge.multiplier(time),
     glow: time => playerCharge.strength(time),
+    respond(time) { playerCharge.refresh(time); },
     adoptColor(color) {
       for (const agent of agents) if (agent.connected) agent.targetTint.copy(color);
     },
-    chirp(time, player, power = 0) {
+    chirp(time, player, power = 0, { recruit = true, slotOffset = 0 } = {}) {
       const charge = Number.isFinite(power) ? THREE.MathUtils.clamp(power, 0, 1) : 0;
       const radius = CHIRP_RADIUS + (MAX_CHIRP_RADIUS - CHIRP_RADIUS) * charge;
       if (time - lastChirp < CHIRP_COOLDOWN) return { emitted: false, receivers: [], charge, radius };
@@ -113,20 +118,31 @@ export function createAutonomousButterflies(count = AUTONOMOUS_BUTTERFLY_COUNT, 
       const receivers = agents.filter(agent => agent.butterfly.group.visible
         && agent.butterfly.group.position.distanceToSquared(player) <= radius ** 2);
       for (const agent of receivers) {
-        if (!agent.connected) {
+        if (recruit && !agent.connected) {
           agent.connected = true;
-          agent.slot = connectedCount++;
+          agent.slot = slotOffset + connectedCount++;
         }
         agent.charge.refresh(time);
       }
       if (receivers.length) playerCharge.refresh(time);
       return { emitted: true, receivers, charge, radius };
     },
+    releaseAll(time) {
+      const released = connectedCount;
+      for (const agent of agents) if (agent.connected) {
+        agent.connected = false; agent.slot = -1; agent.freed = true;
+        agent.targetTint.copy(agent.tint);
+        releaseIntoOrbit(agent.freeFlight, time, agent.butterfly.group.position);
+        agent.charge.reset(); agent.lantern?.reset();
+      }
+      connectedCount = 0; playerCharge.reset();
+      return released;
+    },
     reset(time = 0, center = HYPERBOLOID_POSITION) {
       startTime = time; lastTime = time; lastChirp = -Infinity; connectedCount = 0;
       lastPlayer.copy(center); heading.set(0, 0, -1); playerCharge.reset();
       for (const agent of agents) {
-        agent.connected = false; agent.slot = -1; agent.whiteness = 0;
+        agent.connected = false; agent.slot = -1; agent.whiteness = 0; agent.freed = false;
         agent.butterfly.group.visible = true;
         agent.tint.set('#ffffff'); agent.targetTint.set('#ffffff');
         agent.butterfly.setWhiteness(0);
@@ -159,13 +175,13 @@ export function createAutonomousButterflies(count = AUTONOMOUS_BUTTERFLY_COUNT, 
         const { butterfly, profile, velocity } = agent;
         // Unrescued inhabitants belong to the departed tunnel, not Heaven.
         // Keep zero-power lights in the lighting layout to avoid shader churn.
-        butterfly.group.visible = !tunnel || tunnelSolid || agent.connected;
+        butterfly.group.visible = !tunnel || tunnelSolid || agent.connected || agent.freed;
         if (!butterfly.group.visible) {
           agent.lantern?.reset();
           continue;
         }
         const position = butterfly.group.position;
-        const targetWhiteness = agent.connected ? 1 : 0;
+        const targetWhiteness = agent.connected || agent.freed ? 1 : 0;
         if (dt > 0) {
           agent.whiteness += (targetWhiteness - agent.whiteness) * (1 - Math.exp(-dt * 4.2));
           if (Math.abs(targetWhiteness - agent.whiteness) < .001) agent.whiteness = targetWhiteness;
@@ -173,14 +189,10 @@ export function createAutonomousButterflies(count = AUTONOMOUS_BUTTERFLY_COUNT, 
         butterfly.setWhiteness(agent.whiteness);
         if (dt > 0) agent.tint.lerp(agent.targetTint, 1 - Math.exp(-dt * 4.2));
         butterfly.setTint(agent.tint);
-        if (firstFrame && !agent.connected) roam(profile, flightTime, center, position);
+        if (firstFrame && !agent.connected && !agent.freed) roam(profile, flightTime, center, position);
         if (dt > 0) {
           if (agent.connected) {
-            const side = (agent.slot % 2 ? 1 : -1) * (1.8 + Math.floor(agent.slot / 2) * .85);
-            const behind = 3.2 + Math.floor(agent.slot / 2) * 1.35;
-            target.set(center.x - heading.x * behind - heading.z * side,
-              center.y + Math.sin(flightTime * .65 + profile.phase) * .7 + (agent.slot % 3 - 1) * .65,
-              center.z - heading.z * behind + heading.x * side);
+            companionTarget(center, heading, agent.slot, flightTime, profile.phase, target);
             for (const other of agents) {
               if (!other.connected || other === agent) continue;
               separation.subVectors(position, other.butterfly.group.position);
@@ -190,7 +202,12 @@ export function createAutonomousButterflies(count = AUTONOMOUS_BUTTERFLY_COUNT, 
             separation.subVectors(position, center);
             const playerGap = separation.length();
             if (playerGap > 1e-5 && playerGap < 2) target.addScaledVector(separation, (2 - playerGap) * 2 / playerGap);
-          } else roam(profile, flightTime, center, target);
+          } else if (agent.freed) heavenFlightPosition(agent.freeFlight, time, target);
+          else roam(profile, flightTime, center, target);
+
+          if (agent.freed || (tunnel && !tunnelSolid)) {
+            target.y = Math.max(target.y, meadowSurfaceHeight(target.x, target.z) + 2);
+          }
 
           const maxSpeed = AUTONOMOUS_FLIGHT_SPEED * agent.charge.multiplier(time);
           desiredVelocity.subVectors(target, position).multiplyScalar(agent.connected ? 1.8 : 3).clampLength(0, maxSpeed);
@@ -199,7 +216,7 @@ export function createAutonomousButterflies(count = AUTONOMOUS_BUTTERFLY_COUNT, 
           // Free butterflies stay inside the finite water; bonded ones may
           // accompany the player above or below it without losing the bond.
           if (tunnel) {
-            if (tunnelSolid || !agent.connected) constrainTunnelPosition(position, 3);
+            if (tunnelSolid && !agent.freed) constrainTunnelPosition(position, 3);
           }
           else if (!agent.connected) {
             const localY = position.y - HYPERBOLOID_POSITION.y;
@@ -221,7 +238,8 @@ export function createAutonomousButterflies(count = AUTONOMOUS_BUTTERFLY_COUNT, 
           const daylight = tunnelDaylight(position.z);
           const illumination = THREE.MathUtils.clamp(.018 + nearby * .3 + daylight * .8 + agent.whiteness, 0, 1);
           butterfly.setIllumination(illumination, agent.whiteness * .65, agent.tint);
-          agent.lantern.update(position, butterfly.group.quaternion, agent.whiteness * .75);
+          agent.lantern.update(position, butterfly.group.quaternion, agent.whiteness * .75,
+            tunnelSolid && !agent.freed ? 1 : 0);
         }
       }
     },

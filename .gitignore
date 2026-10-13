@@ -34,3 +34,7 @@ venv/
 # Keep all public assets private by default; only its Markdown documentation is tracked.
 /public/*
 !/public/*.md
+
+# Keep original recordings and artwork out of GitHub and store only selected public media in R2.
+/recordings/
+/thumbnail/

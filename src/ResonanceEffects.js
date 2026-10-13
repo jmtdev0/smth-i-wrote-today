@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { CHIRP_RADIUS } from './resonance.js';
 
 // A small fixed pool of rings: no trail, particles or growing allocations.
-export function createResonanceEffects(player, flock) {
+export function createResonanceEffects(player, flock, heavenFlock = null) {
   const group = new THREE.Group();
   group.name = 'Butterfly calls';
   const geometry = new THREE.RingGeometry(.97, 1, 96);
@@ -35,6 +35,7 @@ export function createResonanceEffects(player, flock) {
   const flashLight = new THREE.PointLight(0xffffff, 0, 12, 2);
   group.add(flashLight);
   let cursor = 0, audioContext = null, disposed = false, flashStart = -Infinity, flashCharge = 0;
+  let effectsVolume = 1, masterGain = null;
   const FLASH_DURATION = .72;
 
   function emit(position, time, radius, duration, color = 0xffffff) {
@@ -47,12 +48,17 @@ export function createResonanceEffects(player, flock) {
   function sound(answered, charge) {
     // Create/resume only in a real input gesture; audio failure is non-blocking.
     const AudioContext = typeof window === 'undefined' ? null : window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext || disposed) return;
+    if (!AudioContext || disposed || effectsVolume === 0) return;
     try {
       audioContext ??= new AudioContext();
       const context = audioContext;
+      if (!masterGain) {
+        masterGain = context.createGain();
+        masterGain.gain.setValueAtTime(effectsVolume, context.currentTime);
+        masterGain.connect(context.destination);
+      }
       void context.resume().then(() => {
-        if (disposed || context.state !== 'running') return;
+        if (disposed || context.state !== 'running' || effectsVolume === 0) return;
         const voices = answered ? [523.25, 783.99] : [523.25];
         voices.forEach((frequency, index) => {
           const start = context.currentTime + index * .12;
@@ -64,7 +70,7 @@ export function createResonanceEffects(player, flock) {
           gain.gain.setValueAtTime(.0001, start);
           gain.gain.exponentialRampToValueAtTime(.018 + .018 * charge, start + .05);
           gain.gain.exponentialRampToValueAtTime(.0001, start + .7);
-          oscillator.connect(gain).connect(context.destination);
+          oscillator.connect(gain).connect(masterGain);
           oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
           oscillator.start(start); oscillator.stop(start + .75);
         });
@@ -74,6 +80,17 @@ export function createResonanceEffects(player, flock) {
 
   return {
     group,
+    setVolume(value) {
+      const number = Number(value);
+      effectsVolume = Number.isFinite(number) ? THREE.MathUtils.clamp(number, 0, 1) : 1;
+      if (!masterGain || disposed) return;
+      // A separate bus adjusts both the call and its answer, including voices
+      // already playing, without affecting music or the visual pulse.
+      const now = audioContext.currentTime, current = masterGain.gain.value;
+      masterGain.gain.cancelScheduledValues(now);
+      masterGain.gain.setValueAtTime(current, now);
+      masterGain.gain.linearRampToValueAtTime(effectsVolume, now + .02);
+    },
     call(position, time, receivers, radius = CHIRP_RADIUS, charge = 0, heavenAnswer = null) {
       emit(position, time, radius, .95 + .2 * charge);
       for (const agent of receivers) emit(agent.butterfly.group.position, time + .12, 1.7 + .3 * charge, .75);
@@ -111,7 +128,7 @@ export function createResonanceEffects(player, flock) {
       halos.forEach(({ butterfly, mesh }, index) => {
         const agent = flock.agents[index - 1];
         const strength = index ? agent.charge.strength(time) : flock.glow(time);
-        const bonded = index ? agent.connected : flock.connectedCount > 0;
+        const bonded = index ? agent.connected : flock.connectedCount + (heavenFlock?.connectedCount ?? 0) > 0;
         // Follow the four-second chirp envelope; companionship and lantern
         // light persist, but the circular indicator fades away with the call.
         mesh.material.opacity = bonded ? strength * .29 : 0;
@@ -136,6 +153,7 @@ export function createResonanceEffects(player, flock) {
     },
     dispose() {
       disposed = true;
+      masterGain?.disconnect();
       if (audioContext && audioContext.state !== 'closed') void audioContext.close().catch(() => {});
       // Mesh resources are collected by main's existing shared-resource disposer.
     },

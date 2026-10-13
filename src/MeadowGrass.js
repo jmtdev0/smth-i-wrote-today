@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { seededRandom } from './noise.js';
 import { meadowSurfaceGLSL } from './MeadowSurface.js';
 import { meadowWingWindGLSL } from './MeadowWingWind.js';
+import { MEADOW_EXTERIOR_EDGE_Z } from './MeadowArrival.js';
 
 // A fixed pool gives a dense foreground without growing with travelled distance.
 export const GRASS_COUNT = 120000;
@@ -54,19 +55,21 @@ export function createMeadowGrass(meadowLife, count = GRASS_COUNT, { middle = fa
   const simplified = middle || far;
   const span = far ? FAR_GRASS_SPAN : middle ? MIDDLE_GRASS_SPAN : GRASS_SPAN;
   const fade = far ? FAR_GRASS_FADE : MIDDLE_GRASS_FADE;
-  const uniforms = { uGrassCenter: { value: new THREE.Vector2() }, uGrassEnabled: { value: 0 } };
+  const uniforms = { uGrassCenter: { value: new THREE.Vector2() }, uGrassEnabled: { value: 0 },
+    uGrassViewPosition: { value: new THREE.Vector3() }, uGrassExteriorOnly: { value: 0 } };
   const material = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
   material.defines = { HEAVEN_GRASS: 1 };
   meadowLife.applyToMaterial(material);
   const meadowCompile = material.onBeforeCompile;
   const green = new THREE.Color('#648649'), yellow = new THREE.Color('#b4ca75');
   const groundGreen = new THREE.Color('#89ab76'), groundYellow = new THREE.Color('#c6d69b');
-  material.customProgramCacheKey = () => far ? 'heaven-grass-far-v2-wingwind' : middle ? 'heaven-grass-middle-v2-wingwind' : 'heaven-grass-v4-wingwind';
+  material.customProgramCacheKey = () => far ? 'heaven-grass-far-v3-arrival' : middle ? 'heaven-grass-middle-v3-arrival' : 'heaven-grass-v5-arrival';
   material.onBeforeCompile = shader => {
     meadowCompile(shader);
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = `uniform vec2 uGrassCenter;
-      uniform float uGrassEnabled, uMeadowTime, uMeadowLife;
+      uniform vec3 uGrassViewPosition;
+      uniform float uGrassEnabled, uGrassExteriorOnly, uMeadowTime, uMeadowLife;
       varying float vGrassFade, vGrassShade, vGrassTip;
       ${meadowSurfaceGLSL}
       ${meadowWingWindGLSL}
@@ -80,7 +83,7 @@ export function createMeadowGrass(meadowLife, count = GRASS_COUNT, { middle = fa
       vec2 root = uGrassCenter + mod(originalRoot - uGrassCenter + ${span / 2}., ${span}.) - ${span / 2}.;
       float height = mvPosition.y;
       float groundY = meadowSurfaceAt(root);
-      float cameraDistance = distance(cameraPosition, vec3(root.x, groundY, root.y));
+      float cameraDistance = distance(uGrassViewPosition, vec3(root.x, groundY, root.y));
       float radialDistance = distance(root, uGrassCenter);
       float edgeFade = 1. - smoothstep(${simplified ? `${fade.outerStart.toFixed(1)}, ${fade.outerEnd.toFixed(1)}` : '24., 38.'}, radialDistance);
       float distanceFade = 1. - smoothstep(${far ? '210., 330.' : middle ? '105., 165.' : '26., 65.'}, cameraDistance);
@@ -104,7 +107,12 @@ export function createMeadowGrass(meadowLife, count = GRASS_COUNT, { middle = fa
       vMeadowWorld = (modelMatrix * mvPosition).xyz;
       mvPosition = modelViewMatrix * mvPosition;
     `);
-    shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', project);
+    shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', project + `
+      // While the tube exists, roots must stay on the actual exterior terrain.
+      // Cull the whole tuft, including its shadow geometry, without new shaders.
+      if (uGrassExteriorOnly > .5 && root.y > ${MEADOW_EXTERIOR_EDGE_Z.toFixed(1)})
+        gl_Position = vec4(2., 2., 2., 1.);
+    `);
     shader.fragmentShader = 'varying float vGrassFade, vGrassShade, vGrassTip;\n' + shader.fragmentShader;
     // Thin translucent-looking foliage receives soft upward light on both
     // faces; back-facing cards must not turn into dark silhouettes.
@@ -128,6 +136,25 @@ export function createMeadowGrass(meadowLife, count = GRASS_COUNT, { middle = fa
   mesh.name = far ? 'Far meadow grass' : middle ? 'Middle-distance meadow grass' : 'Wind-swept meadow grass';
   // Shader wraps instances around the player; CPU bounds do not track that.
   mesh.frustumCulled = false;
+  mesh.receiveShadow = true;
+  if (!simplified) {
+    mesh.castShadow = true;
+    const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide });
+    depth.customProgramCacheKey = () => 'heaven-grass-wind-depth-v2-arrival';
+    depth.onBeforeCompile = shader => {
+      // Reuse the exact wind, terrain, rebasing and LOD deformation. Distance
+      // is measured from the VIEW camera, not the sun's shadow camera.
+      material.onBeforeCompile(shader);
+      shader.vertexShader = shader.vertexShader.replace('#include <logdepthbuf_vertex>', `
+        // Thin foliage transmits sunlight. Stable per-tuft coverage keeps a
+        // dense carpet from becoming an opaque circular shadow around us.
+        float shadowCoverage = .18 * (1. - smoothstep(3., 12., distance(root, uGrassCenter)));
+        if (seed > shadowCoverage || distance(root, uGrassCenter) > 12.) gl_Position = vec4(2., 2., 2., 1.);
+        #include <logdepthbuf_vertex>
+      `);
+    };
+    mesh.customDepthMaterial = depth;
+  }
   const random = seededRandom(far ? 30781 : middle ? 90173 : 60729), dummy = new THREE.Object3D();
   for (let i = 0; i < count; i++) {
     dummy.position.set((random() - .5) * span, 0, (random() - .5) * span);
@@ -138,11 +165,13 @@ export function createMeadowGrass(meadowLife, count = GRASS_COUNT, { middle = fa
   }
   return {
     mesh, uniforms,
-    update(player, enabled) {
+    update(player, enabled, camera = null, openWorld = true) {
       // The modulo shifts roots only by a whole span, beyond the faded edge;
       // the distance fade itself follows the player continuously.
       uniforms.uGrassCenter.value.set(player.x, player.z);
       uniforms.uGrassEnabled.value = enabled ? 1 : 0;
+      uniforms.uGrassExteriorOnly.value = openWorld ? 0 : 1;
+      uniforms.uGrassViewPosition.value.copy(camera?.position ?? player);
       mesh.visible = enabled;
     },
   };

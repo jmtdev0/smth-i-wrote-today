@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { createMeadowCanopy, CANOPY_LAYERS, CANOPY_HEIGHT } from '../src/MeadowCanopy.js';
 import { createMeadowLife } from '../src/MeadowLife.js';
 import { createButterflyParadise } from '../src/ButterflyParadise.js';
+import { MEADOW_PREPARE_START_Z } from '../src/MeadowArrival.js';
 
 test('the grass volume covers the same complete terrain after long journeys, including behind the player', () => {
   const paradise=createButterflyParadise(0), camera=new THREE.PerspectiveCamera();
@@ -16,7 +17,7 @@ test('the grass volume covers the same complete terrain after long journeys, inc
     for(const player of [new THREE.Vector3(0,0,-255),new THREE.Vector3(2400,0,1800)]) {
       camera.position.copy(player);
       paradise.update(0,camera.quaternion,player,camera,false);
-      assert.equal(canopy.visible,false);
+      assert.equal(canopy.visible,player.z < MEADOW_PREPARE_START_Z,'exterior grass is already ready from limbo onwards');
       paradise.update(5,camera.quaternion,player,camera,true);
       paradise.update(9,camera.quaternion,player,camera,true);
       assert.equal(canopy.visible,true);

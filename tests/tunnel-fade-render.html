@@ -2,5 +2,12 @@
 <style>body{margin:0;background:#e7f0e9;font:16px sans-serif}canvas{display:block;max-width:100%;height:auto}button{margin:8px;padding:10px}pre{white-space:pre-wrap}</style>
 <canvas></canvas><button data-progress="0">At exit</button><button data-progress="0.5">Half faded</button><button data-progress="1">Gone</button>
 <button data-view="approach">Inside — approach</button><button data-view="limbo">Inside — limbo rim</button><button data-view="crossing">Crossing the mist</button>
+<fieldset><legend>Grass arrival — first-person flight</legend>
+<button data-arrival="0">Before limbo</button><button data-arrival="3.5">Mist entrance</button>
+<button data-arrival="6.3">Emerging</button><button data-arrival="8.74">Before tunnel removal</button>
+<button data-arrival="8.76">After tunnel removal</button><button data-arrival="11">Heaven settled</button>
+<label>Travel time <input id="arrival-time" type="range" min="0" max="12" step=".02" value="0"></label>
+<label><input id="ground-view" type="checkbox">Inspect near the ground</label>
+</fieldset>
 <pre id="status"></pre>
 <script type="module" src="./tunnel-fade-render.js"></script></html>

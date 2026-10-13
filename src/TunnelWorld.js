@@ -195,7 +195,14 @@ export function createButterflyLantern() {
   group.add(halo, light);
   return {
     group,
-    update(position, quaternion, strength) {
+    update(position, quaternion, strength, tunnelVisibility = 1, firstPersonBlend = 0) {
+      // Fade the persistent lantern with the tunnel, including direct Heaven
+      // starts. Keep the point light registered to avoid shader recompilation.
+      strength *= THREE.MathUtils.clamp(tunnelVisibility, 0, 1);
+      // The camera enters this separate billboard when it reaches the eye.
+      // Fade both the halo and local light before the camera enters the avatar.
+      // Default to third person so companion lanterns are unaffected.
+      strength *= 1 - THREE.MathUtils.smootherstep(firstPersonBlend, 0, .75);
       group.position.copy(position);
       halo.quaternion.copy(quaternion);
       // Keep the additive billboard behind the full flap envelope, in view

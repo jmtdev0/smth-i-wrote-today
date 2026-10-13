@@ -1,21 +1,28 @@
 import * as THREE from 'three';
 import { seededRandom } from './noise.js';
 import { TUNNEL_EXIT_Z } from './TunnelWorld.js';
+import { meadowReadiness } from './MeadowArrival.js';
 import { createInstancedButterflyBodies } from './InstancedButterflyBodies.js';
+import { BUTTERFLY_WHITE_LINE } from './Butterfly.js';
+import { NPC_STROKE_WIDTH } from './ButterflyStroke.js';
 import { createSkyApparition } from './SkyApparition.js';
 import { HEAVEN_SKY } from './WorldAtmosphere.js';
 import { createMeadowLife } from './MeadowLife.js';
 import { arrangeChoreography, heavenFlightPosition as flightPosition } from './HeavenChoreography.js';
-import { meadowHeight } from './MeadowSurface.js';
+import { meadowHeight, meadowSurfaceHeight } from './MeadowSurface.js';
+import { BUTTERFLY_VERTICAL_SPEED } from './flight.js';
+import { companionTarget, createFlightHeading, releaseIntoOrbit } from './CompanionFlight.js';
 import { createMeadowGrass, createMiddleMeadowGrass, createFarMeadowGrass } from './MeadowGrass.js';
 import { createMeadowCanopy } from './MeadowCanopy.js';
 import { createHeavenClouds, heavenCloudsGLSL } from './HeavenClouds.js';
+import { createHeavenButterflyShadows } from './HeavenButterflyShadows.js';
 export { meadowHeight } from './MeadowSurface.js';
 
 export const PARADISE_BUTTERFLY_COUNT = 1400;
 export const HEAVEN_FIELD_SIZE = 1600;
 export const MEADOW_SIZE = 3200;
 const PALETTE = ['#ffbbdc', '#87dcdb', '#ffca72', '#b8a0f0', '#8ebfe9', '#c8e68e', '#f68f9d'];
+const NPC_WING_CURVE_SEGMENTS = 24;
 
 function upperWing() {
   const s = new THREE.Shape();
@@ -34,7 +41,7 @@ function lowerWing() {
   return s;
 }
 
-function wingVeins(side, index) {
+function wingStrokes(side, index, shape) {
   const paths = index === 0 ? [
     [[.08, .08], [.55, .72], [1.5, 1.54]],
     [[.08, .08], [.92, .48], [1.82, .58]],
@@ -44,12 +51,29 @@ function wingVeins(side, index) {
     [[.08, -.04], [.45, -.88], [.72, -1.4]],
   ];
   const vertices = [];
+  // Use the fill's exact polygon for the edge, so the outline cannot detach
+  // while flapping. Bake both faces into the existing instanced vein draw.
+  const edge = shape.getPoints(NPC_WING_CURVE_SEGMENTS).map(p => new THREE.Vector2(p.x * side, p.y));
+  if (edge.at(-1).equals(edge[0])) edge.pop();
+  const offsets = edge.map((point, i) => {
+    const before = edge[(i + edge.length - 1) % edge.length], after = edge[(i + 1) % edge.length];
+    const a = new THREE.Vector2(-(point.y - before.y), point.x - before.x).normalize();
+    const b = new THREE.Vector2(-(after.y - point.y), after.x - point.x).normalize();
+    const miter = a.clone().add(b).normalize();
+    return miter.multiplyScalar(NPC_STROKE_WIDTH * .5 / Math.max(.5, miter.dot(b)));
+  });
+  for (const z of [.012, -.012]) for (let i = 0; i < edge.length; i++) {
+    const next = (i + 1) % edge.length;
+    for (const [j, sign] of [[i, 1], [i, -1], [next, 1], [next, 1], [i, -1], [next, -1]]) {
+      vertices.push(edge[j].x + offsets[j].x * sign, edge[j].y + offsets[j].y * sign, z);
+    }
+  }
   for (const path of paths) {
     const curve = new THREE.QuadraticBezierCurve3(...path.map(([x, y]) => new THREE.Vector3(x * side, y, .012)));
     const points = curve.getPoints(16);
     for (let i = 0; i < points.length - 1; i++) {
       const a = points[i], b = points[i + 1];
-      const n = new THREE.Vector3(-(b.y - a.y), b.x - a.x, 0).normalize().multiplyScalar(.009);
+      const n = new THREE.Vector3(-(b.y - a.y), b.x - a.x, 0).normalize().multiplyScalar(NPC_STROKE_WIDTH * .5);
       const a1 = a.clone().add(n), a2 = a.clone().sub(n), b1 = b.clone().add(n), b2 = b.clone().sub(n);
       for (const p of [a1, a2, b1, b1, a2, b2]) vertices.push(p.x, p.y, p.z);
     }
@@ -66,23 +90,32 @@ export function createButterflyParadise(count = PARADISE_BUTTERFLY_COUNT) {
   const dummy = new THREE.Object3D();
   const tint = new THREE.Color();
   const candidatePosition = new THREE.Vector3();
+  const followTarget = new THREE.Vector3(), desiredVelocity = new THREE.Vector3();
+  const flightHeading = createFlightHeading();
+  let connectedCount = 0, lastFlightTime = null;
   const material = new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide });
-  const veinMaterial = new THREE.MeshBasicMaterial({ color: '#edf4e8', side: THREE.DoubleSide });
+  const veinMaterial = new THREE.MeshBasicMaterial({
+    color: BUTTERFLY_WHITE_LINE, side: THREE.DoubleSide, depthWrite: false, toneMapped: false,
+  });
   const wings = [];
   for (const side of [-1, 1]) for (const [index, shape] of [upperWing(), lowerWing()].entries()) {
-    const geometry = new THREE.ShapeGeometry(shape, 10);
+    const geometry = new THREE.ShapeGeometry(shape, NPC_WING_CURVE_SEGMENTS);
     geometry.scale(side, 1, 1);
     const mesh = new THREE.InstancedMesh(geometry, material, count);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.frustumCulled = false;
-    const veins = new THREE.InstancedMesh(wingVeins(side, index), veinMaterial, count);
+    const veins = new THREE.InstancedMesh(wingStrokes(side, index, shape), veinMaterial, count);
+    veins.name = `Heaven ${side < 0 ? 'left' : 'right'} ${index === 0 ? 'upper' : 'lower'} wing outlines and veins`;
     veins.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     veins.frustumCulled = false;
+    veins.renderOrder = 1;
     group.add(mesh, veins);
     wings.push({ mesh, veins, side, index });
   }
   const { bodies, outlines: bodyOutlines } = createInstancedButterflyBodies(count);
   group.add(bodies, bodyOutlines);
+  const npcShadows = createHeavenButterflyShadows([...wings.map(wing => wing.mesh), bodies], count);
+  group.add(npcShadows.group);
   const profiles = Array.from({ length: count }, (_, i) => {
     const near = i < 240;
     const profile = {
@@ -94,6 +127,8 @@ export function createButterflyParadise(count = PARADISE_BUTTERFLY_COUNT) {
       orbit: 3 + random() * 9,
       scale: near ? .38 + random() * .45 : .25 + random() * .55,
       color: new THREE.Color(PALETTE[i % PALETTE.length]),
+      targetColor: new THREE.Color(PALETTE[i % PALETTE.length]),
+      connected: false, released: false, slot: -1, followPosition: new THREE.Vector3(), velocity: new THREE.Vector3(),
       replyAt: -Infinity,
     };
     tint.set(PALETTE[i % PALETTE.length]);
@@ -103,7 +138,13 @@ export function createButterflyParadise(count = PARADISE_BUTTERFLY_COUNT) {
   });
 
   arrangeChoreography(profiles);
-  const meadowLife = createMeadowLife();
+  function freePosition(profile, time, target) {
+    flightPosition(profile, time, target);
+    if (profile.released) target.y = Math.max(target.y, meadowSurfaceHeight(target.x, target.z) + 2);
+    return target;
+  }
+  const clouds = createHeavenClouds();
+  const meadowLife = createMeadowLife(clouds.uniforms);
   const meadow = new THREE.PlaneGeometry(MEADOW_SIZE, MEADOW_SIZE, 160, 160);
   meadow.rotateX(-Math.PI / 2);
   const positions = meadow.attributes.position;
@@ -120,6 +161,7 @@ export function createButterflyParadise(count = PARADISE_BUTTERFLY_COUNT) {
   meadow.computeVertexNormals();
   const ground = new THREE.Mesh(meadow, meadowLife.material);
   ground.name = 'Endless Heaven meadow';
+  ground.receiveShadow = true;
   group.add(ground);
   const canopy = createMeadowCanopy(meadow, meadowLife);
   group.add(canopy.mesh);
@@ -149,7 +191,6 @@ export function createButterflyParadise(count = PARADISE_BUTTERFLY_COUNT) {
     meadow.attributes.color.needsUpdate = true;
     meadow.computeVertexNormals(); meadow.computeBoundingSphere(); meadow.computeBoundingBox();
   }
-  const clouds = createHeavenClouds();
   const skyUniforms = {
     ...clouds.uniforms,
     uHorizonColor: { value: new THREE.Color(HEAVEN_SKY.horizon) },
@@ -180,8 +221,9 @@ export function createButterflyParadise(count = PARADISE_BUTTERFLY_COUNT) {
       vec3 d = normalize(vDirection);
       // Colors enter in linear space; colorspace_fragment converts once to sRGB.
       vec3 color = mix(uHorizonColor, uZenithColor, smoothstep(-.08, .7, d.y));
-      float sun = pow(max(0., dot(d, normalize(vec3(-.4, .6, -1.)))), 96.);
-      color += vec3(1., .83, .56) * sun * .5;
+      float sunAngle = max(0., dot(d, uSunDirection));
+      float sun = pow(sunAngle, 1200.);
+      color += vec3(1., .88, .68) * (sun * 1.1 + pow(sunAngle, 24.) * .09);
       color = heavenClouds(color, d);
       float forward = dot(d, uCameraForward);
       if (uVideoOpacity > 0. && forward > 0.) {
@@ -221,8 +263,31 @@ export function createButterflyParadise(count = PARADISE_BUTTERFLY_COUNT) {
   return {
     group,
     profiles,
+    get connectedCount() { return connectedCount; },
+    get grassReadiness() { return meadowLife.uniforms.uMeadowLife.value; },
+    adoptColor(color) {
+      for (const profile of profiles) if (profile.connected) profile.targetColor.copy(color);
+    },
+    releaseAll(time) {
+      const released = connectedCount;
+      for (const profile of profiles) if (profile.connected) {
+        releaseIntoOrbit(profile, time, profile.followPosition);
+        profile.connected = false; profile.released = true; profile.slot = -1;
+        profile.targetColor.copy(profile.color);
+      }
+      connectedCount = 0;
+      return released;
+    },
     pulse(time, position, color, charge = 0) { meadowLife.pulse(time, position, color, charge); },
     reset() { meadowLife.reset(); clouds.reset(); },
+    prepareAtmosphere(renderer) { return clouds.prepare(renderer); },
+    renderAtmosphere(renderer, frameMilliseconds = 16.7) {
+      clouds.observeFrame(frameMilliseconds);
+      clouds.render(renderer);
+    },
+    dispose() { clouds.dispose(); grass.mesh.customDepthMaterial.dispose(); npcShadows.dispose(); },
+    get cloudQuality() { return clouds.quality; },
+    get npcShadowCount() { return npcShadows.count; },
     setSkyImage(texture, aspect = 1) {
       skyUniforms.uImage.value = texture;
       skyUniforms.uImageAspect.value = aspect;
@@ -234,24 +299,41 @@ export function createButterflyParadise(count = PARADISE_BUTTERFLY_COUNT) {
       skyUniforms.uVideoOpacity.value = THREE.MathUtils.clamp(opacity, 0, 1);
       skyUniforms.uVideoAspect.value = aspect;
     },
-    chirp(time, position, radius) {
+    chirp(time, position, radius, { recruit = false, slotOffset = 0 } = {}) {
       if (!Number.isFinite(radius) || radius < 0) return null;
-      let closest = null, distanceSquared = radius * radius;
+      let closest = null, distanceSquared = Infinity, closestWasFree = false;
+      const replyPosition = new THREE.Vector3();
       for (const profile of profiles) {
-        flightPosition(profile, time, candidatePosition);
+        if (profile.connected) candidatePosition.copy(profile.followPosition);
+        else freePosition(profile, time, candidatePosition);
         const distance = candidatePosition.distanceToSquared(position);
-        if (distance <= distanceSquared && (!closest || distance < distanceSquared)) {
+        if (distance > radius * radius) continue;
+        const wasFree = !profile.connected;
+        // Prefer an independent NPC's color over a companion already wearing
+        // the group's tint, even if that companion is closer to the player.
+        if (!closest || (wasFree && !closestWasFree) || (wasFree === closestWasFree && distance < distanceSquared)) {
           closest = profile;
           distanceSquared = distance;
+          closestWasFree = wasFree;
+          replyPosition.copy(candidatePosition);
+        }
+        profile.replyAt = time;
+        if (recruit && wasFree) {
+          profile.connected = true; profile.slot = slotOffset + connectedCount++;
+          profile.followPosition.copy(candidatePosition); profile.velocity.set(0, 0, 0);
         }
       }
       if (!closest) return null;
-      closest.replyAt = time;
-      return { position: flightPosition(closest, time, new THREE.Vector3()), color: closest.color.clone() };
+      return { position: replyPosition, color: closest.color.clone() };
     },
-    update(time, cameraQuaternion, player = null, camera = null, openWorld = false, wingbeat = 0) {
-      meadowLife.update(time, openWorld, player, wingbeat);
-      clouds.update(time, openWorld);
+    update(time, cameraQuaternion, player = null, camera = null, openWorld = false, wingbeat = 0, boost = 1) {
+      const dt = lastFlightTime === null ? 0 : THREE.MathUtils.clamp(time - lastFlightTime, 0, .1);
+      lastFlightTime = time;
+      if (player) flightHeading.update(player, dt);
+      const readiness = meadowReadiness(player?.z, openWorld);
+      const grassEnabled = readiness > 0;
+      meadowLife.update(time, grassEnabled, player, wingbeat, readiness);
+      clouds.update(time, openWorld, camera);
       if (camera) {
         sky.position.copy(camera.position);
         skyUniforms.uCameraRight.value.set(1, 0, 0).applyQuaternion(cameraQuaternion);
@@ -262,43 +344,61 @@ export function createButterflyParadise(count = PARADISE_BUTTERFLY_COUNT) {
       }
       if (player) {
         extendMeadow(player, openWorld);
-        grass.update(player, openWorld);
-        middleGrass.update(player, openWorld);
-        farGrass.update(player, openWorld);
-        canopy.update(openWorld);
+        grass.update(player, grassEnabled, camera, openWorld);
+        middleGrass.update(player, grassEnabled, camera, openWorld);
+        farGrass.update(player, grassEnabled, camera, openWorld);
+        canopy.update(grassEnabled);
       }
       skyUniforms.uImageOpacity.value = apparition.update(time, openWorld,
         skyUniforms.uCameraForward.value.y, !!skyUniforms.uImage.value);
+      npcShadows.begin(player, openWorld);
       profiles.forEach((p, i) => {
-        if (player) {
+        if (player && !p.connected) {
           p.x = wrap(p.x, player.x);
           p.z = wrap(p.z, player.z);
           if (!openWorld && p.z + p.orbit > TUNNEL_EXIT_Z - 20) p.z -= HEAVEN_FIELD_SIZE;
         }
         const phase = time * p.speed + p.phase;
-        flightPosition(p, time, dummy.position);
+        if (p.connected && player) {
+          companionTarget(player, flightHeading.direction, p.slot, time, p.phase, followTarget);
+          followTarget.y = Math.max(followTarget.y, meadowSurfaceHeight(followTarget.x, followTarget.z) + 2);
+          const maxSpeed = BUTTERFLY_VERTICAL_SPEED * boost;
+          desiredVelocity.subVectors(followTarget, p.followPosition).multiplyScalar(1.8).clampLength(0, maxSpeed);
+          p.velocity.lerp(desiredVelocity, 1 - Math.exp(-dt * 5)).clampLength(0, maxSpeed);
+          p.followPosition.addScaledVector(p.velocity, dt);
+          dummy.position.copy(p.followPosition);
+          p.color.lerp(p.targetColor, 1 - Math.exp(-dt * 4.2));
+          for (const wing of wings) wing.mesh.setColorAt(i, p.color);
+          bodies.setColorAt(i, p.color);
+        } else if (p.connected) dummy.position.copy(p.followPosition);
+        else freePosition(p, time, dummy.position);
+        const shadowSlot = npcShadows.select(dummy.position);
         const replyAge = time - p.replyAt;
         const reply = replyAge >= 0 && replyAge < 1 ? Math.sin(Math.PI * replyAge) : 0;
-        for (const wing of wings) {
+        for (let part = 0; part < wings.length; part++) {
+          const wing = wings[part];
           dummy.quaternion.copy(cameraQuaternion);
           dummy.rotateZ(Math.sin(phase) * .25);
           dummy.rotateY(wing.side * (.15 + Math.sin(time * (5 + p.speed * 5) + p.phase) * .65 + reply * .35));
           dummy.scale.setScalar(p.scale * (1 + reply * .12));
           dummy.updateMatrix(); wing.mesh.setMatrixAt(i, dummy.matrix);
           wing.veins.setMatrixAt(i, dummy.matrix);
+          npcShadows.setMatrix(part, shadowSlot, dummy.matrix);
         }
         dummy.quaternion.copy(cameraQuaternion);
         dummy.rotateZ(Math.sin(phase) * .25);
         dummy.scale.setScalar(p.scale * (1 + reply * .12));
         dummy.updateMatrix(); bodies.setMatrixAt(i, dummy.matrix);
-        bodyOutlines.setMatrixAt(i, dummy.matrix);
+        npcShadows.setMatrix(wings.length, shadowSlot, dummy.matrix);
       });
+      npcShadows.end();
       for (const wing of wings) {
         wing.mesh.instanceMatrix.needsUpdate = true;
         wing.veins.instanceMatrix.needsUpdate = true;
+        if (connectedCount) wing.mesh.instanceColor.needsUpdate = true;
       }
       bodies.instanceMatrix.needsUpdate = true;
-      bodyOutlines.instanceMatrix.needsUpdate = true;
+      if (connectedCount) bodies.instanceColor.needsUpdate = true;
     },
   };
 }
