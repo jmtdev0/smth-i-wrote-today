@@ -1,15 +1,25 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#05080d" />
     <link rel="icon" type="image/png" href="/favicon-butterfly.png" />
-    <title>Smth I Wrote Today — Hacia la luz</title>
+    <title>Smth I Wrote Today — Toward the Light</title>
   </head>
   <body>
     <main>
-      <canvas id="scene" tabindex="0" aria-label="Túnel hacia un jardín de mariposas. WASD para volar, arrastrar para mirar, Espacio y Alt para subir y bajar. E recluta; Q saluda sin reclutar; F libera la grupeta en Heaven. Esc abre los ajustes."></canvas>
+      <canvas id="scene" tabindex="0" aria-label="A tunnel leading to a butterfly garden. Use WASD to fly, drag to look, and Space and Alt to ascend or descend. On mobile, the left joystick moves and the right joystick controls the camera. E recruits; Q greets without recruiting; F releases the flock in Heaven. Esc opens settings."></canvas>
+      <div id="mobile-controls" class="mobile-controls" role="group" aria-label="Touch controls">
+        <div id="mobile-move-stick" class="mobile-stick mobile-stick--move" role="group" aria-label="Move butterfly">
+          <span class="mobile-stick__base" aria-hidden="true"><span class="mobile-stick__knob"></span></span>
+          <span class="mobile-stick__label" aria-hidden="true">Move</span>
+        </div>
+        <div id="mobile-look-stick" class="mobile-stick mobile-stick--look" role="group" aria-label="Look around">
+          <span class="mobile-stick__base" aria-hidden="true"><span class="mobile-stick__knob"></span></span>
+          <span class="mobile-stick__label" aria-hidden="true">Look</span>
+        </div>
+      </div>
       <section id="settings-panel" class="settings-panel" lang="en" role="dialog" aria-modal="true" aria-label="Settings" hidden>
         <div class="settings-header"><strong>Settings</strong><button id="settings-close" type="button" aria-label="Close settings">Close · Esc</button></div>
         <div class="setting-row">

@@ -25,7 +25,7 @@ document.querySelectorAll('[data-height]').forEach(button => button.onclick = ()
 document.querySelector('#move').onclick = () => { moving = !moving; };
 document.querySelector('#wind').onclick = event => {
   enabled = !enabled; paused = false;
-  event.target.textContent = enabled ? 'Desactivar ráfaga' : 'Activar ráfaga';
+  event.target.textContent = enabled ? 'Disable gust' : 'Enable gust';
 };
 document.querySelector('#view').onclick = () => { overhead = !overhead; };
 document.querySelector('#pause').onclick = () => { paused = !paused; };

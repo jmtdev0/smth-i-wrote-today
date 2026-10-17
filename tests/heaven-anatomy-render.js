@@ -34,18 +34,18 @@ function tint() {
 }
 tint();
 document.querySelector('#tint').onclick = event => {
-  white = !white; tint(); event.target.textContent = white ? 'Color violeta' : 'Color blanco';
+  white = !white; tint(); event.target.textContent = white ? 'Purple tint' : 'White tint';
 };
 document.querySelector('#animate').onclick = event => {
-  running = !running; event.target.textContent = running ? 'Pausar' : 'Animar';
+  running = !running; event.target.textContent = running ? 'Pause' : 'Animate';
 };
 document.querySelector('#background').onclick = event => {
-  meadow = !meadow; event.target.textContent = meadow ? 'Fondo: pradera' : 'Fondo: liso';
+  meadow = !meadow; event.target.textContent = meadow ? 'Background: meadow' : 'Background: plain';
 };
 document.querySelector('#depth').onclick = event => {
   const enabled = !outlines.material.depthTest;
   outlines.traverse(object => { if (object.material) object.material.depthTest = enabled; });
-  event.target.textContent = `Profundidad: ${outlines.material.depthTest ? 'sí' : 'no'}`;
+  event.target.textContent = `Depth test: ${outlines.material.depthTest ? 'on' : 'off'}`;
 };
 function resize() {
   const bounds = canvas.getBoundingClientRect();

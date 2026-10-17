@@ -16,11 +16,14 @@ import { createCameraView, FIRST_PERSON_DISTANCE } from './CameraView.js';
 import { createLoopingAudio } from './audio.js';
 import { mediaUrl } from './mediaUrl.js';
 import { resolveStartPosition } from './startPosition.js';
+import { normalizeJoystick } from './mobileJoystickInput.js';
 import { createSkyVideo, DEFAULT_SKY_VIDEO_OPACITY, MAX_SKY_VIDEO_OPACITY, skyVideoOpacity } from './SkyVideo.js';
 import './style.css';
 import { createHeavenLighting, enableButterflyShadows } from './HeavenLighting.js';
 
 const canvas = document.querySelector('#scene');
+const mobileMoveStick = document.querySelector('#mobile-move-stick');
+const mobileLookStick = document.querySelector('#mobile-look-stick');
 const settingsClose = document.querySelector('#settings-close');
 const settingsPanel = document.querySelector('#settings-panel');
 const cameraSensitivityInput = document.querySelector('#camera-sensitivity');
@@ -118,8 +121,15 @@ const r3ViewGesture = createR3ViewGesture();
 let activeGamepadIndex = null;
 const gamepadButtons = new Map();
 const pointers = new Map();
+const mobileInput = { moveX: 0, moveY: 0, lookX: 0, lookY: 0 };
+const mobileSticks = {
+  move: { element: mobileMoveStick, pointerId: null },
+  look: { element: mobileLookStick, pointerId: null },
+};
 const abort = new AbortController();
 const listen = (target, name, fn, options = {}) => target.addEventListener(name, fn, { ...options, signal: abort.signal });
+bindMobileJoystick('move');
+bindMobileJoystick('look');
 syncSettingsControls();
 listen(settingsClose, 'click', () => setSettingsOpen(false));
 listen(settingsPanel, 'input', e => {
@@ -155,7 +165,9 @@ listen(window, 'keydown', e => {
     }
     return;
   }
-  if (!e.repeat && e.code === 'KeyP') { paused = !paused; keys.clear(); chirpButtons.cancel(); r3ViewGesture.reset(); }
+  if (!e.repeat && e.code === 'KeyP') {
+    paused = !paused; keys.clear(); resetMobileJoysticks(); chirpButtons.cancel(); r3ViewGesture.reset();
+  }
   if (e.code === 'KeyE' || e.code === 'KeyQ') {
     e.preventDefault();
     if (!e.repeat && !paused) chirpButtons.down(e.code, performance.now(), e.code === 'KeyE');
@@ -188,6 +200,7 @@ listen(window, 'gamepaddisconnected', e => {
 });
 const clearInput = () => {
   keys.clear(); pointers.clear(); chirpGesture.reset(); resetGamepadInput();
+  resetMobileJoysticks();
   gamepadButtons.clear(); chirpButtons.cancel();
   r3ViewGesture.reset();
   butterfly.setChirpCharge(0);
@@ -274,9 +287,73 @@ function syncSettingsControls() {
   skyVideoOpacityValue.value = `${Math.round(settings.skyVideoOpacity * 100)}%`;
 }
 
+function bindMobileJoystick(name) {
+  const stick = mobileSticks[name];
+  const { element } = stick;
+  listen(element, 'pointerdown', event => {
+    if (paused || !settingsPanel.hidden || stick.pointerId !== null) return;
+    event.preventDefault();
+    stick.pointerId = event.pointerId;
+    element.setPointerCapture(event.pointerId);
+    updateMobileJoystick(name, event);
+  });
+  listen(element, 'pointermove', event => {
+    if (stick.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    updateMobileJoystick(name, event);
+  });
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+    listen(element, type, event => {
+      if (stick.pointerId !== event.pointerId) return;
+      resetMobileJoystick(name);
+    });
+  }
+}
+
+function updateMobileJoystick(name, event) {
+  const stick = mobileSticks[name];
+  const rect = stick.element.getBoundingClientRect();
+  const maxDistance = rect.width * .30;
+  const dx = event.clientX - (rect.left + rect.width / 2);
+  const dy = event.clientY - (rect.top + rect.height / 2);
+  const axes = normalizeJoystick(dx, dy, maxDistance);
+  stick.element.style.setProperty('--stick-x', `${axes.offsetX}px`);
+  stick.element.style.setProperty('--stick-y', `${axes.offsetY}px`);
+  if (name === 'move') {
+    mobileInput.moveX = axes.x;
+    mobileInput.moveY = axes.y;
+  } else {
+    mobileInput.lookX = axes.x;
+    mobileInput.lookY = axes.y;
+  }
+}
+
+function resetMobileJoystick(name) {
+  const stick = mobileSticks[name];
+  const pointerId = stick.pointerId;
+  stick.pointerId = null;
+  stick.element.style.setProperty('--stick-x', '0px');
+  stick.element.style.setProperty('--stick-y', '0px');
+  if (name === 'move') {
+    mobileInput.moveX = 0;
+    mobileInput.moveY = 0;
+  } else {
+    mobileInput.lookX = 0;
+    mobileInput.lookY = 0;
+  }
+  if (pointerId !== null && stick.element.hasPointerCapture(pointerId)) {
+    stick.element.releasePointerCapture(pointerId);
+  }
+}
+
+function resetMobileJoysticks() {
+  resetMobileJoystick('move');
+  resetMobileJoystick('look');
+}
+
 function setSettingsOpen(open) {
   settingsPanel.hidden = !open;
-  keys.clear(); pointers.clear(); chirpButtons.cancel(); chirpGesture.reset(); resetGamepadInput();
+  keys.clear(); pointers.clear(); resetMobileJoysticks(); chirpButtons.cancel(); chirpGesture.reset(); resetGamepadInput();
   butterfly.setChirpCharge(0);
   r3ViewGesture.reset();
   (open ? settingsClose : canvas).focus({ preventScroll: true });
@@ -335,15 +412,15 @@ function animate(now) {
   const keyboardRise = Number(keys.has('Space')) - Number(keys.has('AltLeft') || keys.has('AltRight'));
   const rise = THREE.MathUtils.clamp(keyboardRise + gamepadInput.ascend - gamepadInput.descend, -1, 1);
   desiredYaw += (Number(keys.has('ArrowRight')) - Number(keys.has('ArrowLeft'))) * dt * .6 * settings.cameraSensitivity;
-  desiredYaw -= gamepadInput.lookX * dt * 2.4 * settings.cameraSensitivity;
-  desiredPitch = THREE.MathUtils.clamp(desiredPitch + gamepadInput.lookY * dt * 1.9 * settings.cameraSensitivity,
+  desiredYaw -= (gamepadInput.lookX + mobileInput.lookX) * dt * 2.4 * settings.cameraSensitivity;
+  desiredPitch = THREE.MathUtils.clamp(desiredPitch + (gamepadInput.lookY + mobileInput.lookY) * dt * 1.9 * settings.cameraSensitivity,
     -CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
   yaw = THREE.MathUtils.damp(yaw, desiredYaw, 12, dt);
   pitch = THREE.MathUtils.damp(pitch, desiredPitch, 12, dt);
   cameraView.setDistance(advanceGamepadZoom(cameraView.targetDistance, gamepadInput.zoom, dt,
     FIRST_PERSON_DISTANCE, MAX_CAMERA_DISTANCE));
-  const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS')) - gamepadInput.moveY;
-  const sideways = Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + gamepadInput.moveX;
+  const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS')) - gamepadInput.moveY - mobileInput.moveY;
+  const sideways = Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + gamepadInput.moveX + mobileInput.moveX;
   const movement = cameraRelativeMovement(yaw, pitch, forward, sideways, rise);
   const boostedDt = motionDt * autonomousButterflies.boost(time);
   const lateralStep = movement.x * boostedDt * BUTTERFLY_VERTICAL_SPEED;

@@ -1,11 +1,11 @@
-<!doctype html><html lang="es"><meta charset="utf-8"><title>Heaven — volumen, luz y sombras</title>
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Heaven — volume, lighting, and shadows</title>
 <style>body{margin:0;background:#e1edf4;font:14px system-ui;color:#203747}nav{padding:6px}button{margin:3px;padding:7px}canvas{display:block;width:100%;height:66vh}pre{margin:10px;white-space:pre-wrap}</style>
-<nav><button data-view="landscape">Paisaje</button><button data-view="sky">Cielo</button><button data-view="near">A ras de la hierba</button><button data-view="above">Desde arriba</button>
-<button data-view="shadow">Sombra de la mariposa</button><button id="clouds">Nubes: sí</button><button id="shadows">Sombras cercanas: sí</button><button id="pause">Pausar</button><button id="advance">Avanzar nubes 60 s</button><button id="travel">Viajar 3 km</button><button id="benchmark">Medir fluidez (6 s)</button></nav>
-<button id="grass-shadow">Sombras de hierba: sí</button><button data-view="horizon">Nubes lejanas (fotograma fijo)</button>
-<button data-view="npc-shadow">NPC cerca de la pradera</button><button data-view="npc-range">NPC lejanas y altas</button><button id="npc-shadow">Sombras NPC: sí</button>
-<button data-view="npc-outline">Contornos NPC y jugador</button>
-<label>Altura NPC <input id="npc-height" type="range" min="2" max="52" step="1" value="3"></label>
-<button data-view="lantern">Luz sobre la hierba</button><button id="lantern">Luz personal: apagada</button>
-<canvas aria-label="Prueba de Heaven"></canvas><pre id="status">Preparando escena…</pre>
+<nav><button data-view="landscape">Landscape</button><button data-view="sky">Sky</button><button data-view="near">At grass level</button><button data-view="above">From above</button>
+<button data-view="shadow">Butterfly shadow</button><button id="clouds">Clouds: on</button><button id="shadows">Nearby shadows: on</button><button id="pause">Pause</button><button id="advance">Advance clouds 60 s</button><button id="travel">Travel 3 km</button><button id="benchmark">Benchmark (6 s)</button></nav>
+<button id="grass-shadow">Grass shadows: on</button><button data-view="horizon">Distant clouds (still frame)</button>
+<button data-view="npc-shadow">NPC near the meadow</button><button data-view="npc-range">Distant, high NPCs</button><button id="npc-shadow">NPC shadows: on</button>
+<button data-view="npc-outline">NPC and player outlines</button>
+<label>NPC height <input id="npc-height" type="range" min="2" max="52" step="1" value="3"></label>
+<button data-view="lantern">Light on grass</button><button id="lantern">Player light: off</button>
+<canvas aria-label="Heaven visual test"></canvas><pre id="status">Preparing scene…</pre>
 <script type="module" src="./heaven-glowup-render.js"></script></html>

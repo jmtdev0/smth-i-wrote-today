@@ -1,10 +1,10 @@
-<!doctype html><html lang="es"><meta charset="utf-8"><title>Comparación de anatomía — jugador y NPC</title>
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Butterfly anatomy — player and NPC</title>
 <style>body{margin:0;background:#e1edf4;font:14px system-ui;color:#203747}nav{padding:12px}button,label{margin:8px}canvas{display:block;width:100%;height:70vh}pre{margin:12px;white-space:pre-wrap}</style>
-<nav>Jugador a la izquierda; NPC a la derecha.
-<label>Distancia <input id="distance" type="range" min="3" max="80" step=".5" value="5"></label>
-<label>Giro <input id="angle" type="range" min="-180" max="180" step="15" value="0"></label>
-<label>Fase NPC <input id="phase" type="range" min="-180" max="180" step="15" value="0"></label>
-<button id="animate">Animar</button><button id="tint">Color blanco</button>
-<button id="background">Fondo: pradera</button><button id="depth">Profundidad: sí</button></nav>
-<canvas aria-label="Comparación de antenas y contornos"></canvas><pre id="status">Preparando…</pre>
+<nav>Player on the left; NPC on the right.
+<label>Distance <input id="distance" type="range" min="3" max="80" step=".5" value="5"></label>
+<label>Rotation <input id="angle" type="range" min="-180" max="180" step="15" value="0"></label>
+<label>NPC phase <input id="phase" type="range" min="-180" max="180" step="15" value="0"></label>
+<button id="animate">Animate</button><button id="tint">White tint</button>
+<button id="background">Background: meadow</button><button id="depth">Depth test: on</button></nav>
+<canvas aria-label="Antenna and outline comparison"></canvas><pre id="status">Preparing…</pre>
 <script type="module" src="./heaven-anatomy-render.js"></script></html>

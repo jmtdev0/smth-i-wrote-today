@@ -1,23 +1,20 @@
-# Recursos multimedia
+# Media assets
 
-El repositorio conserva el código, las pruebas y la documentación; los archivos
-binarios no se publican en GitHub. La música y el vídeo de la escena se sirven
-desde el bucket público R2 `youchosethis-media` en
-`https://youchosethis-media.sarda0x.com`. Netlify define la variable de
-producción `VITE_MEDIA_BASE_URL` con ese origen.
+The repository includes the code, tests, and documentation; binary assets are
+not published to GitHub. The scene's music and video are served from the public
+R2 bucket `youchosethis-media` at `https://youchosethis-media.sarda0x.com`.
+Netlify sets the production variable `VITE_MEDIA_BASE_URL` to that origin.
 
-| Archivo local | Clave R2 | Función |
+| Local file | R2 key | Purpose |
 | --- | --- | --- |
-| `emelie trahan - you chose this.mp3` | `music/you-chose-this.mp3` | Música en bucle y reloj de sincronización del vídeo. |
-| `heaven-sky.mp4` | `video/heaven-sky.mp4` | Vídeo tenue sobre el cielo de Heaven. |
+| `emelie trahan - you chose this.mp3` | `music/you-chose-this.mp3` | Looping music and the video synchronization clock. |
+| `heaven-sky.mp4` | `video/heaven-sky.mp4` | Subtle video layered over Heaven's sky. |
 
-`recordings/`, las imágenes originales y `portrait.png` no se suben al
-repositorio ni a R2. Por eso, la aparición ocasional del cielo se conserva en
-el modo local, pero se omite en la versión pública. `favicon.png` solo se usa
-localmente.
+`recordings/`, original images, and `portrait.png` are not uploaded to the
+repository or R2. As a result, the occasional sky apparition is available in
+the local version but omitted from the public one. `favicon.png` is local-only.
 
-Para ejecutar la experiencia audiovisual completa en local, coloca los medios
-con los nombres indicados en `public/`. La compilación y las pruebas unitarias
-no necesitan esos archivos. La calibración de música y vídeo está descrita en
-[heaven-sky-source.md](./heaven-sky-source.md); si cambias los medios, revisa
-también su sincronización.
+To run the complete audiovisual experience locally, place the media files in
+`public/` using the names above. Builds and unit tests do not require them. Music
+and video calibration is documented in [heaven-sky-source.md](./heaven-sky-source.md);
+if you replace the media, check their synchronization as well.

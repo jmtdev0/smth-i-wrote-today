@@ -1,16 +1,19 @@
-# Vídeo del cielo
+# Sky video
 
-Fuente solicitada: [Emelie Trahan — you chose this (lyric video)](https://www.youtube.com/watch?v=1fXSbALhjIo).
+Requested source: [Emelie Trahan — you chose this (lyric video)](https://www.youtube.com/watch?v=1fXSbALhjIo).
 
-Descargado con yt-dlp y convertido a H.264/MP4 sin audio, con faststart.
-La descarga no implica que sea de dominio público ni concede derechos de redistribución.
+Downloaded with yt-dlp and converted to H.264/MP4 without audio, with faststart
+enabled. Downloading it does not make it public domain or grant redistribution
+rights.
 
-La música de la web es un fragmento de aproximadamente 72,39 segundos; el vídeo dura 162,3 segundos.
-Calibración aproximada: `tiempoVídeo = 2,25 + 0,88 × tiempoMúsica`.
-Comparación por cromas musicales, tolerante a cambios de tono, y envolvente de audio.
-Anclas locales: 5 s → 6,7 s; 25 s → 24,2 s; 45 s → 41,9 s. Resolución del análisis: 0,1 s.
-El vídeo repite secciones musicales; se ha elegido la primera coincidencia.
+The site's music excerpt is approximately 72.39 seconds long; the video is
+162.3 seconds. Approximate calibration: `videoTime = 2.25 + 0.88 × musicTime`.
+Alignment uses pitch-tolerant musical chroma comparison and the audio envelope.
+Local anchors: 5 s → 6.7 s; 25 s → 24.2 s; 45 s → 41.9 s. Analysis resolution:
+0.1 s. The video repeats musical sections; the first matching section was
+selected.
 
-El reloj de reproducción de la música manda sobre el vídeo, incluyendo las vueltas del bucle.
-La sincronización temporal del reproductor no elimina posibles diferencias del montaje original.
-Análisis reproducible: `tools/align-sky-video.py` y `tools/align-sky-chroma.py`.
+The music playback clock drives the video, including music-loop wraps. Player
+time synchronization cannot remove possible differences in the original edit.
+Reproducible analysis: `tools/align-sky-video.py` and
+`tools/align-sky-chroma.py`.

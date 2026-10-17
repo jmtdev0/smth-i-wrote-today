@@ -43,26 +43,26 @@ document.querySelectorAll('[data-view]').forEach(button => button.onclick = () =
   if (view.startsWith('npc-')) document.querySelector('#npc-height').value = view === 'npc-range' ? 24 : 3;
   if (view === 'horizon' || view.startsWith('npc-')) {
     time = 20; paused = true; sky.material.uniforms.uCloudOpacity.value = 1;
-    document.querySelector('#pause').textContent = 'Continuar';
+    document.querySelector('#pause').textContent = 'Resume';
   }
 });
-document.querySelector('#clouds').onclick = event => { clouds = !clouds; event.target.textContent = `Nubes: ${clouds ? 'sí' : 'no'}`; };
-document.querySelector('#shadows').onclick = event => { shadows = !shadows; event.target.textContent = `Sombras cercanas: ${shadows ? 'sí' : 'no'}`; lighting.sun.shadow.intensity = shadows ? 1 : 0; };
+document.querySelector('#clouds').onclick = event => { clouds = !clouds; event.target.textContent = `Clouds: ${clouds ? 'on' : 'off'}`; };
+document.querySelector('#shadows').onclick = event => { shadows = !shadows; event.target.textContent = `Nearby shadows: ${shadows ? 'on' : 'off'}`; lighting.sun.shadow.intensity = shadows ? 1 : 0; };
 document.querySelector('#grass-shadow').onclick = event => {
   const grass = paradise.group.getObjectByName('Wind-swept meadow grass');
   grass.castShadow = !grass.castShadow;
-  event.target.textContent = `Sombras de hierba: ${grass.castShadow ? 'sí' : 'no'}`;
+  event.target.textContent = `Grass shadows: ${grass.castShadow ? 'on' : 'off'}`;
 };
 document.querySelector('#npc-shadow').onclick = event => {
   npcShadowGroup.visible = !npcShadowGroup.visible;
-  event.target.textContent = `Sombras NPC: ${npcShadowGroup.visible ? 'sí' : 'no'}`;
+  event.target.textContent = `NPC shadows: ${npcShadowGroup.visible ? 'on' : 'off'}`;
 };
-document.querySelector('#pause').onclick = event => { paused = !paused; event.target.textContent = paused ? 'Continuar' : 'Pausar'; };
+document.querySelector('#pause').onclick = event => { paused = !paused; event.target.textContent = paused ? 'Resume' : 'Pause'; };
 document.querySelector('#lantern').onclick = event => {
   // Compare the same frozen meadow at full, half and zero tunnel visibility.
   lanternVisibility = lanternVisibility === 0 ? 1 : lanternVisibility === 1 ? .5 : 0;
-  event.target.textContent = `Luz personal: ${lanternVisibility === 0 ? 'apagada' : lanternVisibility === 1 ? 'encendida' : '50 %'}`;
-  paused = true; document.querySelector('#pause').textContent = 'Continuar';
+  event.target.textContent = `Player light: ${lanternVisibility === 0 ? 'off' : lanternVisibility === 1 ? 'on' : '50%'}`;
+  paused = true; document.querySelector('#pause').textContent = 'Resume';
 };
 document.querySelector('#advance').onclick = () => { time += 60; };
 document.querySelector('#travel').onclick = () => { player.x += 3021; player.z -= 2914; };
@@ -112,7 +112,7 @@ function animate(now) {
     }
   }
   butterfly.group.visible = view === 'npc-outline' || (view !== 'horizon' && !view.startsWith('npc-'));
-  npcShadowGroup.visible = view !== 'horizon' && document.querySelector('#npc-shadow').textContent.endsWith('sí');
+  npcShadowGroup.visible = view !== 'horizon' && document.querySelector('#npc-shadow').textContent.endsWith('on');
   for (const object of paradise.group.children) {
     if ((object.isInstancedMesh && object.material.isMeshBasicMaterial) || object.isLineSegments) object.visible = view !== 'horizon';
   }
