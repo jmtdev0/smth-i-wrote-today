@@ -145,6 +145,7 @@ function createButterflyController(group, wingGroups, initialWhiteness = 0, alwa
   const controller = {
     group,
     get whiteness() { return whiteness; },
+    get tintColor() { return '#' + adoptedTint.getHexString(); },
     get wingbeatStrength() { return wingbeatStrength; },
     setWhiteness,
     // Apply after setWhiteness, so tint never compounds between frames.

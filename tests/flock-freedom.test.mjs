@@ -201,6 +201,22 @@ test('keyboard and controller holds keep recruit/greet intent, charge limits and
   assert.equal(input.charge(8000), 0);
 });
 
+test('Heaven disables sustained chirp charge while still emitting a normal chirp', () => {
+  let tunnelSolid = false;
+  const calls = [];
+  const input = createChirpButtons((...args) => calls.push(args), { canCharge: () => tunnelSolid });
+  input.down('mobile-butterfly', 0, true);
+  assert.equal(input.charge(2000), 0);
+  input.up('mobile-butterfly', 2000);
+  assert.deepEqual(calls.pop(), [0, { recruit: true }]);
+
+  tunnelSolid = true;
+  input.down('KeyE', 3000, true);
+  assert.equal(input.charge(3600), .5);
+  input.up('KeyE', 3600);
+  assert.deepEqual(calls.pop(), [.5, { recruit: true }]);
+});
+
 test('released Heaven flyers stay above the meadow, and chirps hit their rendered positions', t => {
   const f = setup(t), p = f.paradise.profiles[0];
   f.paradise.chirp(0, f.player, 12, { recruit: true });

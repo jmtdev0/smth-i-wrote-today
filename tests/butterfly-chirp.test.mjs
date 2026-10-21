@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createButterfly } from '../src/Butterfly.js';
 
+test('exposes the player butterfly tint as it changes and resets to white', () => {
+  const butterfly = createButterfly({ whiteness: 1, alwaysWhite: true });
+  assert.equal(butterfly.tintColor, '#ffffff');
+
+  butterfly.update(0, false);
+  butterfly.adoptColor(new THREE.Color('#f18da8'));
+  butterfly.update(.05, false);
+  assert.notEqual(butterfly.tintColor, '#ffffff', 'the menu can show the in-progress player tint');
+
+  for (let time = .1; time <= 4; time += .05) butterfly.update(time, false);
+  assert.equal(butterfly.tintColor, '#f18da8');
+
+  butterfly.resetTint();
+  assert.equal(butterfly.tintColor, '#ffffff');
+});
+
 test('chirp charge gathers in the chest, folds the player butterfly, then releases and recovers', () => {
   const butterfly = createButterfly({ whiteness: 1, alwaysWhite: true });
   const body = butterfly.group.getObjectByName('butterfly body');

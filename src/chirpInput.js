@@ -2,7 +2,7 @@ import { MAX_CHIRP_CHARGE_SECONDS } from './resonance.js';
 
 // Independent holds retain their intent until release. Cancelling a menu,
 // focus loss or a disconnected controller must never emit a delayed call.
-export function createChirpButtons(onChirp) {
+export function createChirpButtons(onChirp, { canCharge = () => true } = {}) {
   const held = new Map();
   const charge = (start, now) => Math.max(0, Math.min(1, (now - start) / (MAX_CHIRP_CHARGE_SECONDS * 1000)));
   return {
@@ -10,9 +10,10 @@ export function createChirpButtons(onChirp) {
     up(id, now) {
       const hold = held.get(id);
       held.delete(id);
-      if (hold) onChirp(charge(hold.start, now), { recruit: hold.recruit });
+      if (hold) onChirp(canCharge() ? charge(hold.start, now) : 0, { recruit: hold.recruit });
     },
     charge(now) {
+      if (!canCharge()) return 0;
       let maximum = 0;
       for (const hold of held.values()) maximum = Math.max(maximum, charge(hold.start, now));
       return maximum;
