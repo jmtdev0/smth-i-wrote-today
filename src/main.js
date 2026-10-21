@@ -675,7 +675,7 @@ function setSettingsOpen(open) {
   cancelMobileChirpHold();
   settingsPanel.hidden = !open;
   settingsPanel.classList.toggle('settings-panel--gear-visible',
-    open && mobileLayout.matches && !mobileSettingsButton.hidden);
+    open && mobileLayout.matches && !mobileSettingsButton.hidden && !mobileSettingsButton.classList.contains('is-fading'));
   if (open) mobileSettingsHotspot.hidden = true;
   else syncMobileSettingsAccess();
   keys.clear(); pointers.clear(); resetMobileJoysticks(); chirpButtons.cancel(); chirpGesture.reset(); resetGamepadInput();
@@ -709,6 +709,7 @@ function scheduleMobileSettingsGearHide(delay) {
   clearMobileSettingsGearTimer();
   mobileSettingsGearTimer = window.setTimeout(() => {
     mobileSettingsButton.classList.add('is-fading');
+    settingsPanel.classList.remove('settings-panel--gear-visible');
     mobileSettingsGearTimer = window.setTimeout(hideMobileSettingsGear, 260);
   }, delay);
 }

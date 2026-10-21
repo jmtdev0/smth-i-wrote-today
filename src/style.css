@@ -105,8 +105,8 @@ main { position: relative; }
 .mobile-settings-hotspot {
   top: 0;
   right: 0;
-  width: max(96px, calc(env(safe-area-inset-right) + 84px));
-  height: max(96px, calc(env(safe-area-inset-top) + 84px));
+  width: max(96px, 50vw);
+  height: max(96px, 30dvh);
   margin: 0;
   padding: 0;
   border: 0;
@@ -283,6 +283,7 @@ main { position: relative; }
   font: 13px/1.4 system-ui, sans-serif;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  transition: top .24s ease, max-height .24s ease;
 }
 .settings-panel[hidden] { display: none; }
 .settings-panel.settings-panel--gear-visible {
