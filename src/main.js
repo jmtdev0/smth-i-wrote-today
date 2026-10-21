@@ -13,7 +13,7 @@ import { emitButterflyChirp, releaseButterflyGroup } from './chirpAction.js';
 import { advanceAltitude, cameraRelativeMovement, BUTTERFLY_VERTICAL_SPEED } from './flight.js';
 import { CAMERA_PITCH_LIMIT } from './angles.js';
 import { createCameraView, FIRST_PERSON_DISTANCE } from './CameraView.js';
-import { createLoopingAudio } from './audio.js';
+import { bindAudioUnlock, createLoopingAudio } from './audio.js';
 import { mediaUrl } from './mediaUrl.js';
 import { resolveStartPosition } from './startPosition.js';
 import { normalizeJoystick } from './mobileJoystickInput.js';
@@ -100,10 +100,8 @@ const skyVideoTextures = skyVideo.videos.map(video => {
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 });
-const unlockAudio = () => { ambientAudio.start(); };
-window.addEventListener('pointerdown', unlockAudio, { once: true, passive: true });
-window.addEventListener('keydown', unlockAudio, { once: true, passive: true });
-ambientAudio.start();
+const audioUnlock = bindAudioUnlock(ambientAudio);
+void audioUnlock.start();
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setClearColor(HEAVEN_SKY.horizon);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -191,7 +189,10 @@ listen(window, 'pointerdown', event => {
 bindMobileJoystick();
 bindMobileChirpTarget();
 syncSettingsControls();
-listen(mobileExperienceOk, 'click', () => mobileExperienceNotice.close());
+listen(mobileExperienceOk, 'click', () => {
+  void audioUnlock.start();
+  mobileExperienceNotice.close();
+});
 listen(mobileExperienceNotice, 'close', syncMobileSettingsAccess);
 listen(mobileSettingsHotspot, 'click', event => {
   event.preventDefault();
@@ -825,6 +826,7 @@ void Promise.all([renderer.compileAsync(scene, camera), paradise.prepareAtmosphe
 });
 if (import.meta.hot) import.meta.hot.dispose(() => {
   disposed = true;
+  audioUnlock.dispose();
   cancelAnimationFrame(frame); abort.abort();
   const resources = new Set();
   // The completed tunnel is detached, but still owns resources for reset.

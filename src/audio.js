@@ -1,5 +1,36 @@
 const DEFAULT_FADE_SECONDS = 2.5;
 
+export function bindAudioUnlock(player, target = window) {
+  const events = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
+  const listenerOptions = { capture: true, passive: true };
+  let disposed = false;
+  const removeListeners = () => {
+    for (const type of events) target.removeEventListener(type, onInteraction, listenerOptions);
+  };
+  const start = async () => {
+    if (disposed) return false;
+    // Call play synchronously inside the gesture, before awaiting its result.
+    const started = await player.start();
+    if (started) removeListeners();
+    return started;
+  };
+  const onInteraction = event => {
+    // Touch and pen activate playback on release, not on initial contact.
+    if (event.type === 'pointerdown' && event.pointerType !== 'mouse') return;
+    void start();
+  };
+  for (const type of events) {
+    target.addEventListener(type, onInteraction, listenerOptions);
+  }
+  return {
+    start,
+    dispose() {
+      disposed = true;
+      removeListeners();
+    },
+  };
+}
+
 export function fadeVolume(elapsedSeconds, maxVolume, fadeSeconds = DEFAULT_FADE_SECONDS) {
   if (fadeSeconds <= 0) return maxVolume;
   return Math.min(maxVolume, Math.max(0, elapsedSeconds / fadeSeconds * maxVolume));
