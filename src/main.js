@@ -31,7 +31,6 @@ const mobileControls = document.querySelector('#mobile-controls');
 const mobileSettingsHotspot = document.querySelector('#mobile-settings-hotspot');
 const mobileSettingsButton = document.querySelector('#mobile-settings-button');
 const mobileMoveStick = document.querySelector('#mobile-move-stick');
-const mobileLookStick = document.querySelector('#mobile-look-stick');
 const mobileChirpTarget = document.querySelector('#mobile-chirp-target');
 const mobileChirpMenu = document.querySelector('#mobile-chirp-menu');
 const mobileChirpOptions = [...mobileChirpMenu.querySelectorAll('[data-mobile-chirp-option]')];
@@ -172,11 +171,8 @@ const r3ViewGesture = createR3ViewGesture();
 let activeGamepadIndex = null;
 const gamepadButtons = new Map();
 const pointers = new Map();
-const mobileInput = { moveX: 0, moveY: 0, lookX: 0, lookY: 0 };
-const mobileSticks = {
-  move: { element: mobileMoveStick, pointerId: null },
-  look: { element: mobileLookStick, pointerId: null },
-};
+const mobileInput = { moveX: 0, moveY: 0 };
+const mobileStick = { element: mobileMoveStick, pointerId: null };
 const abort = new AbortController();
 const listen = (target, name, fn, options = {}) => target.addEventListener(name, fn, { ...options, signal: abort.signal });
 listen(window, 'pointerdown', event => {
@@ -188,10 +184,11 @@ listen(window, 'pointerdown', event => {
 listen(window, 'pointerdown', event => {
   const mode = controlsModeForPointer(event.pointerType, mobileLayout.matches);
   if (mode) setControlsMode(mode);
-  if (mobileLayout.matches && settingsPanel.hidden && !paused) mobileControlVisibility.interact();
+  if (mobileLayout.matches && settingsPanel.hidden && !paused && mobileStick.pointerId === null) {
+    mobileControlVisibility.interact();
+  }
 });
-bindMobileJoystick('move');
-bindMobileJoystick('look');
+bindMobileJoystick();
 bindMobileChirpTarget();
 syncSettingsControls();
 listen(mobileExperienceOk, 'click', () => mobileExperienceNotice.close());
@@ -245,7 +242,7 @@ listen(window, 'keydown', e => {
     return;
   }
   if (!e.repeat && e.code === 'KeyP') {
-    paused = !paused; keys.clear(); resetMobileJoysticks(); cancelMobileChirpHold(); chirpButtons.cancel(); r3ViewGesture.reset();
+    paused = !paused; keys.clear(); resetMobileJoystick(); cancelMobileChirpHold(); chirpButtons.cancel(); r3ViewGesture.reset();
   }
   if (e.code === 'KeyE' || e.code === 'KeyQ') {
     e.preventDefault();
@@ -284,7 +281,7 @@ listen(window, 'gamepaddisconnected', e => {
 const clearInput = () => {
   keys.clear(); pointers.clear(); chirpGesture.reset(); resetGamepadInput();
   cancelMobileChirpHold();
-  resetMobileJoysticks();
+  resetMobileJoystick();
   gamepadButtons.clear(); chirpButtons.cancel();
   r3ViewGesture.reset();
   butterfly.setChirpCharge(0);
@@ -385,8 +382,8 @@ function syncSettingsControls() {
   skyVideoOpacityValue.value = `${Math.round(settings.skyVideoOpacity * 100)}%`;
 }
 
-function bindMobileJoystick(name) {
-  const stick = mobileSticks[name];
+function bindMobileJoystick() {
+  const stick = mobileStick;
   const { element } = stick;
   listen(element, 'pointerdown', event => {
     if (paused || !settingsPanel.hidden || mobileExperienceNotice.open || stick.pointerId !== null) return;
@@ -394,17 +391,17 @@ function bindMobileJoystick(name) {
     stick.pointerId = event.pointerId;
     mobileControlVisibility.joystickPressed();
     element.setPointerCapture(event.pointerId);
-    updateMobileJoystick(name, event);
+    updateMobileJoystick(event);
   });
   listen(element, 'pointermove', event => {
     if (stick.pointerId !== event.pointerId) return;
     event.preventDefault();
-    updateMobileJoystick(name, event);
+    updateMobileJoystick(event);
   });
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
     listen(element, type, event => {
       if (stick.pointerId !== event.pointerId) return;
-      resetMobileJoystick(name);
+      resetMobileJoystick();
     });
   }
 }
@@ -601,8 +598,9 @@ function updateMobileControlVisibility(dt) {
     return;
   }
   if (!settingsPanel.hidden || mobileExperienceNotice.open) return;
-  const joystickActive = Object.values(mobileSticks).some(stick => stick.pointerId !== null);
-  const interacting = joystickActive || pointers.size > 0 || mobileChirpHold !== null;
+  const joystickHeld = mobileStick.pointerId !== null;
+  const joystickActive = joystickHeld && (mobileInput.moveX !== 0 || mobileInput.moveY !== 0);
+  const interacting = joystickHeld || pointers.size > 0 || mobileChirpHold !== null;
   mobileControls.classList.toggle('is-hidden', !mobileControlVisibility.update(dt, {
     joystickActive,
     interacting,
@@ -630,8 +628,8 @@ function updateMobileChirpTarget() {
   mobileChirpTarget.hidden = false;
 }
 
-function updateMobileJoystick(name, event) {
-  const stick = mobileSticks[name];
+function updateMobileJoystick(event) {
+  const stick = mobileStick;
   const rect = stick.element.getBoundingClientRect();
   const maxDistance = rect.width * .30;
   const dx = event.clientX - (rect.left + rect.width / 2);
@@ -639,36 +637,21 @@ function updateMobileJoystick(name, event) {
   const axes = normalizeJoystick(dx, dy, maxDistance);
   stick.element.style.setProperty('--stick-x', `${axes.offsetX}px`);
   stick.element.style.setProperty('--stick-y', `${axes.offsetY}px`);
-  if (name === 'move') {
-    mobileInput.moveX = axes.x;
-    mobileInput.moveY = axes.y;
-  } else {
-    mobileInput.lookX = axes.x;
-    mobileInput.lookY = axes.y;
-  }
+  mobileInput.moveX = axes.x;
+  mobileInput.moveY = axes.y;
 }
 
-function resetMobileJoystick(name) {
-  const stick = mobileSticks[name];
+function resetMobileJoystick() {
+  const stick = mobileStick;
   const pointerId = stick.pointerId;
   stick.pointerId = null;
   stick.element.style.setProperty('--stick-x', '0px');
   stick.element.style.setProperty('--stick-y', '0px');
-  if (name === 'move') {
-    mobileInput.moveX = 0;
-    mobileInput.moveY = 0;
-  } else {
-    mobileInput.lookX = 0;
-    mobileInput.lookY = 0;
-  }
+  mobileInput.moveX = 0;
+  mobileInput.moveY = 0;
   if (pointerId !== null && stick.element.hasPointerCapture(pointerId)) {
     stick.element.releasePointerCapture(pointerId);
   }
-}
-
-function resetMobileJoysticks() {
-  resetMobileJoystick('move');
-  resetMobileJoystick('look');
 }
 
 function setSettingsOpen(open) {
@@ -678,7 +661,7 @@ function setSettingsOpen(open) {
     open && mobileLayout.matches && !mobileSettingsButton.hidden && !mobileSettingsButton.classList.contains('is-fading'));
   if (open) mobileSettingsHotspot.hidden = true;
   else syncMobileSettingsAccess();
-  keys.clear(); pointers.clear(); resetMobileJoysticks(); chirpButtons.cancel(); chirpGesture.reset(); resetGamepadInput();
+  keys.clear(); pointers.clear(); resetMobileJoystick(); chirpButtons.cancel(); chirpGesture.reset(); resetGamepadInput();
   butterfly.setChirpCharge(0);
   if (!open && mobileLayout.matches) mobileControlVisibility.interact();
   r3ViewGesture.reset();
@@ -783,8 +766,8 @@ function animate(now) {
   const keyboardRise = Number(keys.has('Space')) - Number(keys.has('AltLeft') || keys.has('AltRight'));
   const rise = THREE.MathUtils.clamp(keyboardRise + gamepadInput.ascend - gamepadInput.descend, -1, 1);
   desiredYaw += (Number(keys.has('ArrowRight')) - Number(keys.has('ArrowLeft'))) * dt * .6 * settings.cameraSensitivity;
-  desiredYaw -= (gamepadInput.lookX + mobileInput.lookX) * dt * 2.4 * settings.cameraSensitivity;
-  desiredPitch = THREE.MathUtils.clamp(desiredPitch + (gamepadInput.lookY + mobileInput.lookY) * dt * 1.9 * settings.cameraSensitivity,
+  desiredYaw -= gamepadInput.lookX * dt * 2.4 * settings.cameraSensitivity;
+  desiredPitch = THREE.MathUtils.clamp(desiredPitch + gamepadInput.lookY * dt * 1.9 * settings.cameraSensitivity,
     -CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
   yaw = THREE.MathUtils.damp(yaw, desiredYaw, 12, dt);
   pitch = THREE.MathUtils.damp(pitch, desiredPitch, 12, dt);

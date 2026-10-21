@@ -11,9 +11,21 @@ test('joysticks fade after repeated use and a short idle period', () => {
   assert.equal(controls.visible, false);
 });
 
-test('several seconds of joystick use also qualify the controls to fade', () => {
+test('Move fades during an uninterrupted flight and stays hidden while the finger remains held', () => {
   const controls = createMobileControlVisibility();
-  assert.equal(controls.update(8, { joystickActive: true, interacting: true }), true);
+  controls.joystickPressed();
+  assert.equal(controls.update(4.9, { joystickActive: true, interacting: true }), true);
+  assert.equal(controls.update(.2, { joystickActive: true, interacting: true }), false);
+  assert.equal(controls.update(10, { joystickActive: true, interacting: true }), false);
+});
+
+test('shorter flights do not combine into a continuous hold, but still qualify for the idle fade', () => {
+  const controls = createMobileControlVisibility();
+  controls.joystickPressed();
+  assert.equal(controls.update(4, { joystickActive: true, interacting: true }), true);
+  controls.update(0);
+  controls.joystickPressed();
+  assert.equal(controls.update(4, { joystickActive: true, interacting: true }), true);
   assert.equal(controls.update(4), false);
 });
 

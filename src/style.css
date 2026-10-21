@@ -54,10 +54,9 @@ main { position: relative; }
   border-radius: 50%;
   pointer-events: auto;
   touch-action: none;
-  transition: opacity .55s ease, transform .55s ease;
+  transition: opacity .55s ease;
 }
 .mobile-stick--move { left: max(1.25rem, env(safe-area-inset-left)); }
-.mobile-stick--look { right: max(1.25rem, env(safe-area-inset-right)); }
 .mobile-stick__base {
   position: absolute;
   inset: 0;
@@ -98,7 +97,6 @@ main { position: relative; }
 }
 .mobile-controls.is-hidden .mobile-stick {
   opacity: 0;
-  transform: translateY(12px) scale(.94);
 }
 .mobile-settings-hotspot,
 .mobile-settings-button { position: fixed; z-index: 8; }
