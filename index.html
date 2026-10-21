@@ -9,7 +9,12 @@
   </head>
   <body>
     <main>
-      <canvas id="scene" tabindex="0" aria-label="A tunnel leading to a butterfly garden. Use WASD to fly, drag to look, and Space and Alt to ascend or descend. On mobile, the left joystick moves and the right joystick controls the camera. E recruits; Q greets without recruiting; F releases the flock in Heaven. Esc opens settings."></canvas>
+      <dialog id="mobile-experience-notice" class="mobile-experience-notice" aria-labelledby="mobile-experience-title" aria-describedby="mobile-experience-description">
+        <h2 id="mobile-experience-title">For the best experience, try a computer</h2>
+        <p id="mobile-experience-description">This 3D scene is best experienced on a computer. You can still explore it on your phone.</p>
+        <button id="mobile-experience-ok" type="button" autofocus>OK</button>
+      </dialog>
+      <canvas id="scene" tabindex="0" aria-label="A butterfly flying through a tunnel into a garden. Open Settings and the Controls guide for instructions."></canvas>
       <div id="mobile-controls" class="mobile-controls" role="group" aria-label="Touch controls">
         <div id="mobile-move-stick" class="mobile-stick mobile-stick--move" role="group" aria-label="Move butterfly">
           <span class="mobile-stick__base" aria-hidden="true"><span class="mobile-stick__knob"></span></span>
@@ -19,6 +24,73 @@
           <span class="mobile-stick__base" aria-hidden="true"><span class="mobile-stick__knob"></span></span>
           <span class="mobile-stick__label" aria-hidden="true">Look</span>
         </div>
+      </div>
+      <button id="mobile-settings-hotspot" class="mobile-settings-hotspot" type="button" aria-label="Reveal settings button" hidden></button>
+      <button id="mobile-settings-button" class="mobile-settings-button" type="button" aria-label="Open settings" title="Settings" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path fill="currentColor" fill-rule="evenodd" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.28 7.28 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.49-.42h-3.84a.5.5 0 0 0-.49.42l-.36 2.54a7.28 7.28 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.95 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .61.22l2.39-.96c.5.38 1.04.69 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.84a.5.5 0 0 0 .49-.42l.36-2.54c.59-.25 1.13-.56 1.63-.94l2.39.96a.5.5 0 0 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 8.25a3.75 3.75 0 1 0 0 7.5 3.75 3.75 0 0 0 0-7.5z" />
+        </svg>
+      </button>
+      <button id="mobile-chirp-target" class="mobile-chirp-target" type="button" aria-label="Chirp as the player butterfly" hidden></button>
+      <div id="mobile-chirp-menu" class="mobile-chirp-menu" role="group" aria-label="Choose a Heaven chirp" hidden>
+        <svg class="mobile-chirp-symbol-defs" aria-hidden="true" focusable="false">
+          <defs>
+            <!-- The scene's Bezier wings and sampled veins from Butterfly.js. -->
+            <g id="mobile-chirp-wing">
+              <path d="M.05 .08C.18 .92 .72 1.72 1.5 1.62C2.08 1.54 2.08 .75 1.67 .22C1.25-.28 .5-.18 .05 .08Z" />
+              <path d="M.06 .02C.5-.14 1.35-.22 1.55-.78C1.78-1.4 1.18-1.73 .68-1.44C.22-1.16 .04-.5 .06 .02Z" />
+              <g fill="none">
+                <polyline points=".08,.08 .113,.126 .145,.171 .176,.217 .207,.263 .237,.308 .268,.354 .299,.399 .331,.445 .363,.491 .397,.536 .433,.582 .470,.628 .509,.674 .550,.720 .606,.778 .665,.836 .727,.895 .792,.953 .860,1.012 .929,1.070 1,1.129 1.072,1.188 1.144,1.246 1.217,1.305 1.289,1.364 1.361,1.423 1.431,1.481 1.5,1.54" />
+                <polyline points=".08,.08 .140,.109 .199,.140 .259,.171 .318,.203 .377,.235 .436,.267 .495,.299 .555,.330 .615,.359 .675,.388 .735,.414 .796,.439 .858,.461 .920,.480 .982,.496 1.045,.510 1.108,.521 1.172,.530 1.236,.537 1.301,.543 1.366,.548 1.431,.552 1.496,.556 1.561,.560 1.626,.564 1.691,.568 1.756,.574 1.82,.58" />
+                <polyline points=".08,.08 .124,.083 .168,.086 .211,.088 .254,.091 .296,.094 .339,.097 .382,.099 .426,.102 .470,.105 .514,.108 .559,.111 .605,.114 .652,.117 .7,.12 .760,.124 .822,.128 .885,.132 .950,.136 1.015,.141 1.082,.145 1.149,.149 1.216,.154 1.284,.158 1.352,.162 1.420,.167 1.487,.171 1.554,.176 1.62,.18" />
+                <polyline points=".08,0 .125,-.032 .170,-.065 .215,-.099 .260,-.132 .304,-.166 .349,-.200 .393,-.233 .438,-.266 .483,-.299 .529,-.331 .576,-.362 .623,-.393 .671,-.422 .72,-.45 .772,-.478 .825,-.505 .879,-.530 .934,-.555 .990,-.578 1.046,-.601 1.103,-.624 1.160,-.646 1.217,-.668 1.274,-.690 1.331,-.712 1.388,-.734 1.444,-.757 1.5,-.78" />
+                <polyline points=".08,-.04 .107,-.100 .133,-.162 .160,-.224 .187,-.286 .214,-.349 .240,-.411 .267,-.473 .294,-.535 .320,-.596 .347,-.655 .373,-.714 .399,-.771 .425,-.826 .45,-.88 .470,-.921 .490,-.961 .509,-1 .529,-1.038 .548,-1.076 .567,-1.112 .586,-1.148 .605,-1.184 .625,-1.220 .644,-1.255 .663,-1.291 .682,-1.327 .701,-1.363 .72,-1.4" />
+              </g>
+            </g>
+            <symbol id="mobile-chirp-butterfly" viewBox="-2.14 -1.8 4.28 3.6">
+              <g transform="scale(1 -1)" fill="currentColor" stroke="var(--mobile-butterfly-line, rgb(255 255 255 / 78%))" stroke-width=".035" stroke-linecap="round" stroke-linejoin="round">
+                <use href="#mobile-chirp-wing" />
+                <use href="#mobile-chirp-wing" transform="scale(-1 1)" />
+                <rect x="-.115" y="-.615" width=".23" height="1.17" rx=".115" />
+                <circle cx="0" cy=".72" r=".21" />
+                <path d="M-.07 .86Q-.28 1.18-.43 1.25M.07 .86Q.28 1.18 .43 1.25" fill="none" />
+              </g>
+            </symbol>
+          </defs>
+        </svg>
+        <button class="mobile-chirp-option mobile-chirp-option--gather" type="button" data-mobile-chirp-option="gather" aria-label="Gather nearby butterflies" aria-pressed="true">
+          <svg class="mobile-chirp-icon mobile-chirp-icon--swarm" viewBox="0 0 108 66" aria-hidden="true">
+            <g class="mobile-chirp-icon__arrows"><path d="M54 24v8m-3-3 3 3 3-3M27 46h10m-3-3 3 3-3 3M81 46H71m3-3-3 3 3 3" /></g>
+            <use href="#mobile-chirp-butterfly" x="0" y="36" width="24" height="22" class="mobile-chirp-butterfly--npc-pink" />
+            <use href="#mobile-chirp-butterfly" x="84" y="36" width="24" height="22" class="mobile-chirp-butterfly--npc-cyan" />
+            <use href="#mobile-chirp-butterfly" x="42" y="0" width="24" height="22" class="mobile-chirp-butterfly--npc-gold" />
+            <use href="#mobile-chirp-butterfly" x="40" y="34" width="28" height="26" class="mobile-chirp-butterfly--player" />
+          </svg>
+          <span>Gather</span>
+        </button>
+        <button class="mobile-chirp-option mobile-chirp-option--greet" type="button" data-mobile-chirp-option="greet" aria-label="Share your color without gathering companions" aria-pressed="false">
+          <svg class="mobile-chirp-icon mobile-chirp-icon--sound" viewBox="0 0 72 44" aria-hidden="true">
+            <use href="#mobile-chirp-butterfly" x="0" y="8" width="28" height="28" class="mobile-chirp-butterfly--player" />
+            <g class="mobile-chirp-icon__waves"><path d="M33 14c5 4 5 12 0 16m8-21c9 7 9 19 0 26m9-32c13 10 13 28 0 38" /></g>
+          </svg>
+          <span>Chirp</span>
+        </button>
+        <button class="mobile-chirp-option mobile-chirp-option--white" type="button" data-mobile-chirp-option="white" aria-label="Return to white" aria-pressed="false">
+          <svg class="mobile-chirp-icon mobile-chirp-icon--white" viewBox="0 0 48 44" aria-hidden="true">
+            <use href="#mobile-chirp-butterfly" x="0" y="0" width="48" height="44" class="mobile-chirp-butterfly--white" />
+          </svg>
+          <span>White</span>
+        </button>
+        <button class="mobile-chirp-option mobile-chirp-option--release" type="button" data-mobile-chirp-option="release" aria-label="Let your companions fly free" hidden>
+          <svg class="mobile-chirp-icon mobile-chirp-icon--swarm" viewBox="0 0 108 66" aria-hidden="true">
+            <g class="mobile-chirp-icon__arrows"><path d="M54 32v-8m-3 3 3-3 3 3M37 46H27m3-3-3 3 3 3M71 46h10m-3-3 3 3-3 3" /></g>
+            <use href="#mobile-chirp-butterfly" x="0" y="36" width="24" height="22" class="mobile-chirp-butterfly--npc-pink" />
+            <use href="#mobile-chirp-butterfly" x="84" y="36" width="24" height="22" class="mobile-chirp-butterfly--npc-cyan" />
+            <use href="#mobile-chirp-butterfly" x="42" y="0" width="24" height="22" class="mobile-chirp-butterfly--npc-gold" />
+            <use href="#mobile-chirp-butterfly" x="40" y="34" width="28" height="26" class="mobile-chirp-butterfly--player" />
+          </svg>
+          <span>Release</span>
+        </button>
       </div>
       <section id="settings-panel" class="settings-panel" lang="en" role="dialog" aria-modal="true" aria-label="Settings" hidden>
         <div class="settings-header"><strong>Settings</strong><button id="settings-close" type="button" aria-label="Close settings">Close · Esc</button></div>
@@ -43,14 +115,81 @@
           </div>
           <input id="effects-volume" type="range" min="0" max="100" step="1" value="100" />
         </div>
-        <div class="setting-row">
+        <div id="sky-video-opacity-row" class="setting-row" data-heaven-only hidden>
           <div class="setting-heading">
             <label for="sky-video-opacity">Sky video opacity</label>
             <output id="sky-video-opacity-value" for="sky-video-opacity">12%</output>
           </div>
           <input id="sky-video-opacity" type="range" min="0" max="30" step="1" value="12" />
         </div>
-        <p class="controls-help">Hold R3 + left stick up/down: zoom in/out.<br>Zoom all the way in: first person. Zoom out to return.<br>Double-tap R3: instantly switch first/third person.<br>Inside the tunnel, every chirp rescues nearby butterflies.<br>E / Circle: recruit, keeping NPC colors.<br>Q / Square: share color; no recruitment in Heaven.<br>Hold either button to charge, then release.<br>F / Triangle: release the flock in Heaven.<br>R / Cross (X): white chirp; no recruitment in Heaven.<br>Esc / Options: open or close settings.</p>
+        <section class="controls-help" aria-labelledby="controls-help-title">
+          <h2 id="controls-help-title">Controls</h2>
+          <div class="controls-help__group" data-control-group="keyboard-mouse">
+            <h3>Keyboard &amp; Mouse</h3>
+            <ul class="controls-help__list">
+              <li>WASD: fly. Space / Alt: rise or dip. Left / right arrows: turn.</li>
+              <li>Drag to look around. Use the mouse wheel to zoom; zoom all the way in for first person, or out to return.</li>
+              <li>Esc: open or close settings.</li>
+            </ul>
+            <div class="controls-help__zone" data-control-zone="tunnel">
+              <h4>Controls - Tunnel</h4>
+              <ul class="controls-help__list">
+                <li>E: call the butterflies you’ve rescued; nearby companions gather into your flight. Hold the key to let the call gather strength.</li>
+              </ul>
+            </div>
+            <div class="controls-help__zone" data-control-zone="heaven" hidden>
+              <h4>Controls - Heaven</h4>
+              <ul class="controls-help__list">
+                <li>E: invite nearby butterflies to fly with you, in their own colors.</li>
+                <li>Q: share your color with nearby butterflies, leaving them free.</li>
+                <li>R: let your wings return to white.</li>
+                <li data-control-release hidden>F: let your companions fly free.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="controls-help__group" data-control-group="gamepad" hidden>
+            <h3>Controller</h3>
+            <ul class="controls-help__list">
+              <li>Left stick: fly. Right stick: look around. L2 / R2: dip / rise.</li>
+              <li>Hold R3 and move the left stick up / down to zoom. Zoom all the way in for first person; zoom out to return. Double-tap R3 to switch instantly.</li>
+              <li>Options: open or close settings.</li>
+            </ul>
+            <div class="controls-help__zone" data-control-zone="tunnel">
+              <h4>Controls - Tunnel</h4>
+              <ul class="controls-help__list">
+                <li>Circle: call the butterflies you’ve rescued; nearby companions gather into your flight. Hold the button to let the call gather strength.</li>
+              </ul>
+            </div>
+            <div class="controls-help__zone" data-control-zone="heaven" hidden>
+              <h4>Controls - Heaven</h4>
+              <ul class="controls-help__list">
+                <li>Circle: invite nearby butterflies to fly with you, in their own colors.</li>
+                <li>Square: share your color with nearby butterflies, leaving them free.</li>
+                <li>Cross (X): let your wings return to white.</li>
+                <li data-control-release hidden>Triangle: let your companions fly free.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="controls-help__group" data-control-group="touch" hidden>
+            <h3>Touch</h3>
+            <ul class="controls-help__list">
+              <li>Left joystick: fly. Right joystick: look around.</li>
+            </ul>
+            <div class="controls-help__zone" data-control-zone="tunnel">
+              <h4>Controls - Tunnel</h4>
+              <ul class="controls-help__list">
+                <li>Tap your butterfly to call; hold to let the call gather strength. Every call draws the butterflies you’ve rescued into your flight.</li>
+              </ul>
+            </div>
+            <div class="controls-help__zone" data-control-zone="heaven" hidden>
+              <h4>Controls - Heaven</h4>
+              <ul class="controls-help__list">
+                <li>Tap to make your chosen call. Hold and drag to Gather, Chirp, or White; your last choice stays with you.</li>
+                <li data-control-release hidden>When companions are with you, choose Release to let them fly free.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
       </section>
     </main>
     <script type="module" src="/src/main.js"></script>

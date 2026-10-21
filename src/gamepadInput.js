@@ -18,11 +18,11 @@ export function gamepadButton(gamepad, index) {
   return button.pressed ? 1 : Number.isFinite(value) ? clamp(value, 0, 1) : 0;
 }
 
-// Standard DualShock mapping. Called only on button edges, so Cross behaves
-// like keyboard R: one immediate white chirp, never a charged recruitment.
+// Standard DualShock mapping. In Heaven, Cross behaves like keyboard R: one
+// immediate white chirp, never a charged recruitment.
 export const GAMEPAD_ACTION_BUTTONS = [9, 3, 0, 1, 2];
 export function dispatchGamepadAction(index, pressed, now,
-  { enabled, toggleSettings, releaseGroup, chirp, chirpButtons }) {
+  { enabled, heaven = true, toggleSettings, releaseGroup, chirp, chirpButtons }) {
   if (index === 9) {
     if (pressed) toggleSettings();
     return;
@@ -32,9 +32,9 @@ export function dispatchGamepadAction(index, pressed, now,
     return;
   }
   if (pressed) {
-    if (index === 0) chirp(0, { restoreWhite: true, recruit: false });
+    if (index === 0 && heaven) chirp(0, { restoreWhite: true, recruit: false });
     else if (index === 3) releaseGroup();
-    else if (index === 1 || index === 2) chirpButtons.down(`gamepad${index}`, now, index === 1);
+    else if (index === 1 || (index === 2 && heaven)) chirpButtons.down(`gamepad${index}`, now, index === 1);
   } else if (index === 1 || index === 2) chirpButtons.up(`gamepad${index}`, now);
 }
 

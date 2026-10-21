@@ -17,15 +17,61 @@ import { createLoopingAudio } from './audio.js';
 import { mediaUrl } from './mediaUrl.js';
 import { resolveStartPosition } from './startPosition.js';
 import { normalizeJoystick } from './mobileJoystickInput.js';
+import { createMobileControlVisibility } from './mobileControlVisibility.js';
+import { layoutHeavenChirpMenu, createMobileChirpMenu } from './mobileChirpMenu.js';
+import { detectControlsMode, controlsModeForPointer } from './controlsMode.js';
 import { createSkyVideo, DEFAULT_SKY_VIDEO_OPACITY, MAX_SKY_VIDEO_OPACITY, skyVideoOpacity } from './SkyVideo.js';
 import './style.css';
 import { createHeavenLighting, enableButterflyShadows } from './HeavenLighting.js';
 
 const canvas = document.querySelector('#scene');
+const mobileExperienceNotice = document.querySelector('#mobile-experience-notice');
+const mobileExperienceOk = document.querySelector('#mobile-experience-ok');
+const mobileControls = document.querySelector('#mobile-controls');
+const mobileSettingsHotspot = document.querySelector('#mobile-settings-hotspot');
+const mobileSettingsButton = document.querySelector('#mobile-settings-button');
 const mobileMoveStick = document.querySelector('#mobile-move-stick');
 const mobileLookStick = document.querySelector('#mobile-look-stick');
+const mobileChirpTarget = document.querySelector('#mobile-chirp-target');
+const mobileChirpMenu = document.querySelector('#mobile-chirp-menu');
+const mobileChirpOptions = [...mobileChirpMenu.querySelectorAll('[data-mobile-chirp-option]')];
+const mobileChirpReleaseOption = mobileChirpMenu.querySelector('[data-mobile-chirp-option="release"]');
+const mobileLayout = matchMedia('(any-pointer: coarse), (max-width: 760px)');
 const settingsClose = document.querySelector('#settings-close');
 const settingsPanel = document.querySelector('#settings-panel');
+let mobileSettingsGearTimer = null;
+const controlsHelpGroups = [...document.querySelectorAll('[data-control-group]')];
+const controlsHelpZones = [...document.querySelectorAll('[data-control-zone]')];
+const controlsReleaseHints = [...document.querySelectorAll('[data-control-release]')];
+let activeControlsZone = null;
+let controlsReleaseVisible = null;
+function getConnectedGamepads() {
+  if (typeof navigator.getGamepads !== 'function') return [];
+  try { return Array.from(navigator.getGamepads()).filter(gamepad => gamepad?.connected); }
+  catch { return []; }
+}
+function setControlsMode(mode) {
+  if (!controlsHelpGroups.some(group => group.dataset.controlGroup === mode)) return;
+  for (const group of controlsHelpGroups) group.hidden = group.dataset.controlGroup !== mode;
+}
+function syncControlsHelp() {
+  const zone = tunnel.solid ? 'tunnel' : 'heaven';
+  if (zone !== activeControlsZone) {
+    activeControlsZone = zone;
+    for (const group of controlsHelpZones) group.hidden = group.dataset.controlZone !== zone;
+    if (zone === 'tunnel') {
+      chirpButtons.cancel('KeyQ');
+      chirpButtons.cancel('gamepad2');
+    }
+  }
+  skyVideoOpacityRow.hidden = zone !== 'heaven';
+  const hasCompanions = autonomousButterflies.connectedCount + paradise.connectedCount > 0;
+  if (hasCompanions !== controlsReleaseVisible) {
+    controlsReleaseVisible = hasCompanions;
+    for (const hint of controlsReleaseHints) hint.hidden = !hasCompanions;
+  }
+}
+setControlsMode(detectControlsMode({ touchLayout: mobileLayout.matches, gamepads: getConnectedGamepads() }));
 const cameraSensitivityInput = document.querySelector('#camera-sensitivity');
 const cameraSensitivityValue = document.querySelector('#camera-sensitivity-value');
 const musicVolumeInput = document.querySelector('#music-volume');
@@ -34,6 +80,7 @@ const effectsVolumeInput = document.querySelector('#effects-volume');
 const effectsVolumeValue = document.querySelector('#effects-volume-value');
 const skyVideoOpacityInput = document.querySelector('#sky-video-opacity');
 const skyVideoOpacityValue = document.querySelector('#sky-video-opacity-value');
+const skyVideoOpacityRow = document.querySelector('#sky-video-opacity-row');
 const SETTINGS_STORAGE_KEY = 'smth-i-wrote-today-settings-v1';
 const DEFAULT_SETTINGS = Object.freeze({ cameraSensitivity: 1, musicVolume: 1, effectsVolume: 1, skyVideoOpacity: DEFAULT_SKY_VIDEO_OPACITY });
 const settings = loadSettings();
@@ -101,20 +148,24 @@ const previousPlayer = player.clone();
 const landscapeChirpColor = new THREE.Color('#ffffff');
 autonomousButterflies.update(0, player, camera.quaternion);
 function chirp(charge = 0, { restoreWhite = false, recruit = true } = {}) {
-  if (paused || document.hidden || !settingsPanel.hidden) return;
+  if (paused || document.hidden || !settingsPanel.hidden || mobileExperienceNotice.open) return;
   const result = emitButterflyChirp({ time, player, butterfly, flock: autonomousButterflies,
     paradise, tunnel, effects: resonanceEffects, landscapeColor: landscapeChirpColor,
     charge, restoreWhite, recruit });
   return result;
 }
 function releaseGroup() {
-  if (paused || document.hidden || !settingsPanel.hidden) return;
+  if (paused || document.hidden || !settingsPanel.hidden || mobileExperienceNotice.open) return;
   const released = releaseButterflyGroup({ time, tunnel, flock: autonomousButterflies, paradise });
   if (released) { chirpButtons.cancel(); chirpGesture.reset(); butterfly.setChirpCharge(0); }
   canvas.focus({ preventScroll: true });
 }
 const chirpGesture = createChirpGesture(chirp);
-const chirpButtons = createChirpButtons(chirp);
+const chirpButtons = createChirpButtons(chirp, { canCharge: () => tunnel.solid });
+const mobileControlVisibility = createMobileControlVisibility();
+const mobileHeavenChirpMenu = createMobileChirpMenu();
+const mobileChirpScreen = new THREE.Vector3();
+let mobileChirpHold = null;
 const keys = new Set();
 const gamepadInput = resetGamepadMotion();
 const r3ViewGesture = createR3ViewGesture();
@@ -128,9 +179,35 @@ const mobileSticks = {
 };
 const abort = new AbortController();
 const listen = (target, name, fn, options = {}) => target.addEventListener(name, fn, { ...options, signal: abort.signal });
+listen(window, 'pointerdown', event => {
+  if (settingsPanel.hidden || settingsPanel.contains(event.target) || mobileSettingsButton.contains(event.target)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  setSettingsOpen(false);
+}, { capture: true });
+listen(window, 'pointerdown', event => {
+  const mode = controlsModeForPointer(event.pointerType, mobileLayout.matches);
+  if (mode) setControlsMode(mode);
+  if (mobileLayout.matches && settingsPanel.hidden && !paused) mobileControlVisibility.interact();
+});
 bindMobileJoystick('move');
 bindMobileJoystick('look');
+bindMobileChirpTarget();
 syncSettingsControls();
+listen(mobileExperienceOk, 'click', () => mobileExperienceNotice.close());
+listen(mobileExperienceNotice, 'close', syncMobileSettingsAccess);
+listen(mobileSettingsHotspot, 'click', event => {
+  event.preventDefault();
+  revealMobileSettingsGear();
+});
+listen(mobileSettingsButton, 'click', () => {
+  if (!mobileLayout.matches || mobileExperienceNotice.open) return;
+  setSettingsOpen(settingsPanel.hidden);
+  scheduleMobileSettingsGearHide(2500);
+});
+listen(mobileLayout, 'change', syncMobileSettingsAccess);
+if (mobileLayout.matches) mobileExperienceNotice.showModal();
+syncMobileSettingsAccess();
 listen(settingsClose, 'click', () => setSettingsOpen(false));
 listen(settingsPanel, 'input', e => {
   if (e.target === cameraSensitivityInput) {
@@ -151,6 +228,8 @@ listen(settingsPanel, 'input', e => {
   saveSettings();
 });
 listen(window, 'keydown', e => {
+  setControlsMode('keyboard-mouse');
+  if (mobileExperienceNotice.open) return;
   if (e.code === 'Escape') {
     e.preventDefault();
     if (!e.repeat) setSettingsOpen(settingsPanel.hidden);
@@ -166,11 +245,13 @@ listen(window, 'keydown', e => {
     return;
   }
   if (!e.repeat && e.code === 'KeyP') {
-    paused = !paused; keys.clear(); resetMobileJoysticks(); chirpButtons.cancel(); r3ViewGesture.reset();
+    paused = !paused; keys.clear(); resetMobileJoysticks(); cancelMobileChirpHold(); chirpButtons.cancel(); r3ViewGesture.reset();
   }
   if (e.code === 'KeyE' || e.code === 'KeyQ') {
     e.preventDefault();
-    if (!e.repeat && !paused) chirpButtons.down(e.code, performance.now(), e.code === 'KeyE');
+    if (!e.repeat && !paused && (e.code === 'KeyE' || !tunnel.solid)) {
+      chirpButtons.down(e.code, performance.now(), e.code === 'KeyE');
+    }
   }
   if (e.code === 'KeyF') {
     e.preventDefault();
@@ -178,7 +259,7 @@ listen(window, 'keydown', e => {
   }
   if (e.code === 'KeyR') {
     e.preventDefault();
-    if (!e.repeat) chirp(0, { restoreWhite: true, recruit: false });
+    if (!e.repeat && !tunnel.solid) chirp(0, { restoreWhite: true, recruit: false });
   }
   if (['Space', 'AltLeft', 'AltRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
     e.preventDefault(); keys.add(e.code);
@@ -190,6 +271,7 @@ listen(window, 'keyup', e => {
 });
 listen(window, 'gamepadconnected', e => {
   if (activeGamepadIndex === null || e.gamepad.mapping === 'standard') activeGamepadIndex = e.gamepad.index;
+  setControlsMode('gamepad');
 });
 listen(window, 'gamepaddisconnected', e => {
   if (activeGamepadIndex === e.gamepad.index) {
@@ -197,9 +279,11 @@ listen(window, 'gamepaddisconnected', e => {
     r3ViewGesture.reset();
   }
   resetGamepadInput();
+  setControlsMode(detectControlsMode({ touchLayout: mobileLayout.matches, gamepads: getConnectedGamepads() }));
 });
 const clearInput = () => {
   keys.clear(); pointers.clear(); chirpGesture.reset(); resetGamepadInput();
+  cancelMobileChirpHold();
   resetMobileJoysticks();
   gamepadButtons.clear(); chirpButtons.cancel();
   r3ViewGesture.reset();
@@ -209,36 +293,31 @@ listen(window, 'blur', clearInput);
 listen(document, 'visibilitychange', () => { clearInput(); last = performance.now(); });
 listen(canvas, 'pointerdown', e => {
   if (!settingsPanel.hidden) return;
-  chirpGesture.down(e);
+  if (mobileChirpHold && mobileChirpHold.pointerId !== e.pointerId) {
+    mobileChirpHold.cancelled = true;
+    mobileHeavenChirpMenu.cancel();
+    closeMobileChirpMenu();
+    chirpButtons.cancel(mobileChirpHold.key);
+    pointers.set(mobileChirpHold.pointerId, { x: mobileChirpHold.lastX, y: mobileChirpHold.lastY });
+    chirpGesture.reset();
+  } else chirpGesture.down(e);
   canvas.focus({ preventScroll: true });
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 });
-listen(canvas, 'pointermove', e => {
-  chirpGesture.move(e);
-  const previous = pointers.get(e.pointerId);
-  if (!previous) return;
-  if (pointers.size === 1) {
-    desiredYaw -= (e.clientX - previous.x) * .005 * settings.cameraSensitivity;
-    desiredPitch = THREE.MathUtils.clamp(desiredPitch + (e.clientY - previous.y) * .004 * settings.cameraSensitivity, -CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
-  } else {
-    const other = [...pointers.entries()].find(([id]) => id !== e.pointerId)[1];
-    const before = Math.hypot(previous.x - other.x, previous.y - other.y);
-    const after = Math.hypot(e.clientX - other.x, e.clientY - other.y);
-    cameraView.zoom((before - after) * .04);
-  }
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-});
+listen(canvas, 'pointermove', handleCameraPointerMove);
 listen(canvas, 'pointerup', e => { chirpGesture.up(e); pointers.delete(e.pointerId); });
 for (const event of ['pointercancel', 'lostpointercapture']) {
   listen(canvas, event, e => { chirpGesture.cancel(e); pointers.delete(e.pointerId); });
 }
 listen(canvas, 'wheel', e => {
   e.preventDefault();
+  setControlsMode('keyboard-mouse');
   if (!settingsPanel.hidden) return;
   cameraView.zoom(e.deltaY * .012);
 }, { passive: false });
 function resize() {
+  cancelMobileChirpHold();
   const ratio = Math.min(devicePixelRatio, 1.75);
   renderer.setPixelRatio(ratio);
   renderer.setSize(innerWidth, innerHeight);
@@ -247,6 +326,25 @@ function resize() {
 }
 listen(window, 'resize', resize);
 resize();
+
+function handleCameraPointerMove(event) {
+  chirpGesture.move(event);
+  const previous = pointers.get(event.pointerId);
+  if (!previous) return;
+  if (pointers.size === 1) {
+    desiredYaw -= (event.clientX - previous.x) * .005 * settings.cameraSensitivity;
+    desiredPitch = THREE.MathUtils.clamp(desiredPitch + (event.clientY - previous.y) * .004 * settings.cameraSensitivity,
+      -CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
+  } else {
+    const otherEntry = [...pointers.entries()].find(([id]) => id !== event.pointerId);
+    if (!otherEntry) return;
+    const other = otherEntry[1];
+    const before = Math.hypot(previous.x - other.x, previous.y - other.y);
+    const after = Math.hypot(event.clientX - other.x, event.clientY - other.y);
+    cameraView.zoom((before - after) * .04);
+  }
+  pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+}
 
 function resetGamepadInput() {
   resetGamepadMotion(gamepadInput);
@@ -291,9 +389,10 @@ function bindMobileJoystick(name) {
   const stick = mobileSticks[name];
   const { element } = stick;
   listen(element, 'pointerdown', event => {
-    if (paused || !settingsPanel.hidden || stick.pointerId !== null) return;
+    if (paused || !settingsPanel.hidden || mobileExperienceNotice.open || stick.pointerId !== null) return;
     event.preventDefault();
     stick.pointerId = event.pointerId;
+    mobileControlVisibility.joystickPressed();
     element.setPointerCapture(event.pointerId);
     updateMobileJoystick(name, event);
   });
@@ -308,6 +407,227 @@ function bindMobileJoystick(name) {
       resetMobileJoystick(name);
     });
   }
+}
+
+function bindMobileChirpTarget() {
+  listen(mobileChirpTarget, 'pointerdown', event => {
+    if (paused || !settingsPanel.hidden || mobileExperienceNotice.open || mobileChirpHold) return;
+    event.preventDefault();
+    mobileChirpHold = {
+      pointerId: event.pointerId,
+      key: `mobile-butterfly-${event.pointerId}`,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      heaven: !tunnel.solid,
+      menuOpen: false,
+      cancelled: false,
+    };
+    mobileChirpTarget.setPointerCapture(event.pointerId);
+    if (mobileChirpHold.heaven) mobileHeavenChirpMenu.pointerDown(performance.now());
+    else chirpButtons.down(mobileChirpHold.key, performance.now(), true);
+  });
+  listen(mobileChirpTarget, 'pointermove', event => {
+    const hold = mobileChirpHold;
+    if (!hold || hold.pointerId !== event.pointerId) return;
+    hold.lastX = event.clientX;
+    hold.lastY = event.clientY;
+    const now = performance.now();
+    if (hold.heaven && !hold.cancelled) {
+      updateMobileHeavenChirpMenu(now);
+      if (hold.menuOpen) {
+        mobileHeavenChirpMenu.hover(mobileChirpOptionAt(event.clientX, event.clientY), now);
+        syncMobileChirpMenuOptions(now);
+        return;
+      }
+    }
+    if (!hold.cancelled && Math.hypot(event.clientX - hold.startX, event.clientY - hold.startY) > 12) {
+      hold.cancelled = true;
+      if (hold.heaven) {
+        mobileHeavenChirpMenu.cancel();
+        closeMobileChirpMenu();
+      }
+      chirpButtons.cancel(hold.key);
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      chirpGesture.reset();
+    }
+    if (hold.cancelled) handleCameraPointerMove(event);
+  });
+  listen(mobileChirpTarget, 'pointerup', event => {
+    const hold = mobileChirpHold;
+    if (!hold || hold.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const now = performance.now();
+    if (hold.heaven && !hold.cancelled) {
+      updateMobileHeavenChirpMenu(now);
+      if (hold.menuOpen) mobileHeavenChirpMenu.hover(mobileChirpOptionAt(event.clientX, event.clientY), now);
+    }
+    mobileChirpHold = null;
+    if (hold.cancelled) pointers.delete(event.pointerId);
+    else if (hold.heaven) {
+      const choice = mobileHeavenChirpMenu.pointerUp(now);
+      closeMobileChirpMenu();
+      if (choice?.type === 'chirp') {
+        syncMobileChirpMenuOptions(now);
+        performMobileChirp(choice.mode);
+      } else if (choice?.type === 'release') releaseGroup();
+    } else chirpButtons.up(hold.key, performance.now());
+    if (mobileChirpTarget.hasPointerCapture(event.pointerId)) mobileChirpTarget.releasePointerCapture(event.pointerId);
+  });
+  for (const type of ['pointercancel', 'lostpointercapture']) {
+    listen(mobileChirpTarget, type, event => {
+      if (mobileChirpHold?.pointerId === event.pointerId && mobileChirpHold.cancelled) pointers.delete(event.pointerId);
+      cancelMobileChirpHold(event.pointerId);
+    });
+  }
+  listen(mobileChirpTarget, 'click', event => {
+    if (event.detail === 0 && !paused && settingsPanel.hidden && !mobileExperienceNotice.open) {
+      if (tunnel.solid) chirp();
+      else performMobileChirp(mobileHeavenChirpMenu.selectedMode);
+    }
+  });
+  for (const option of mobileChirpOptions) listen(option, 'click', event => {
+    if (event.detail !== 0 || mobileChirpMenu.hidden || paused || !settingsPanel.hidden || mobileExperienceNotice.open) return;
+    event.preventDefault();
+    activateMobileChirpOption(option.dataset.mobileChirpOption);
+  });
+}
+
+function performMobileChirp(mode) {
+  if (mode === 'greet') return chirp(0, { recruit: false });
+  if (mode === 'white') return chirp(0, { restoreWhite: true, recruit: false });
+  return chirp(0, { recruit: true });
+}
+
+function activateMobileChirpOption(option) {
+  if (mobileChirpHold) mobileChirpHold.cancelled = true;
+  mobileHeavenChirpMenu.cancel();
+  if (option === 'release') releaseGroup();
+  else if (['gather', 'greet', 'white'].includes(option)) {
+    mobileHeavenChirpMenu.selectMode(option);
+    syncMobileChirpMenuOptions(performance.now());
+    performMobileChirp(option);
+  }
+  closeMobileChirpMenu();
+}
+
+function openMobileChirpMenu(hold) {
+  if (mobileChirpHold !== hold || hold.cancelled || !mobileHeavenChirpMenu.open) return;
+  hold.menuOpen = true;
+  chirpButtons.cancel(hold.key);
+  butterfly.setChirpCharge(0);
+  mobileChirpReleaseOption.hidden = autonomousButterflies.connectedCount + paradise.connectedCount <= 0;
+  const target = mobileChirpTarget.getBoundingClientRect();
+  // Anchor once for this gesture; the butterfly's idle bob must not move the choices.
+  positionMobileChirpMenu(target.left + target.width / 2, target.top + target.height / 2);
+  mobileChirpMenu.hidden = false;
+  mobileChirpMenu.classList.add('is-open');
+  syncMobileChirpMenuOptions(performance.now());
+}
+
+function positionMobileChirpMenu(x, y) {
+  const hold = mobileChirpHold;
+  const layout = layoutHeavenChirpMenu(x, y, innerWidth, innerHeight, hold?.menuPlacement);
+  if (hold) hold.menuPlacement = layout.placement;
+  mobileChirpMenu.style.left = `${layout.x}px`;
+  mobileChirpMenu.style.top = `${layout.y}px`;
+  mobileChirpMenu.style.setProperty('--menu-scale', String(layout.scale));
+  mobileChirpMenu.style.setProperty('--menu-button-size', `${layout.buttonSize}px`);
+  for (const option of mobileChirpOptions) {
+    const offset = layout.options[option.dataset.mobileChirpOption];
+    option.style.left = `${offset.x}px`;
+    option.style.top = `${offset.y}px`;
+  }
+}
+
+function updateMobileHeavenChirpMenu(now) {
+  const hold = mobileChirpHold;
+  if (!hold?.heaven || hold.cancelled) return;
+  if (mobileHeavenChirpMenu.update(now)) openMobileChirpMenu(hold);
+  if (hold.menuOpen) syncMobileChirpMenuOptions(now);
+}
+
+function mobileChirpOptionAt(x, y) {
+  for (const option of mobileChirpOptions) {
+    if (option.hidden) continue;
+    const rect = option.getBoundingClientRect();
+    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      return option.dataset.mobileChirpOption;
+    }
+  }
+  return null;
+}
+
+function syncMobileChirpMenuOptions(now) {
+  const progress = mobileHeavenChirpMenu.releaseProgress(now);
+  const armed = mobileHeavenChirpMenu.releaseArmed(now);
+  const playerColor = butterfly.tintColor;
+  mobileChirpMenu.style.setProperty('--mobile-player-color', playerColor);
+  for (const option of mobileChirpOptions) {
+    const name = option.dataset.mobileChirpOption;
+    const isChirpMode = ['gather', 'greet', 'white'].includes(name);
+    if (name === 'white') option.hidden = playerColor === '#ffffff';
+    option.classList.toggle('is-current', name === mobileHeavenChirpMenu.selectedMode);
+    option.classList.toggle('is-hovered', name === mobileHeavenChirpMenu.hoveredOption);
+    option.classList.toggle('is-armed', name === 'release' && armed);
+    option.style.setProperty('--hold-progress', `${progress * 100}%`);
+    option.setAttribute('aria-pressed', String(isChirpMode && name === mobileHeavenChirpMenu.selectedMode));
+  }
+}
+
+function closeMobileChirpMenu() {
+  mobileChirpMenu.hidden = true;
+  mobileChirpMenu.classList.remove('is-open');
+  mobileChirpReleaseOption.classList.remove('is-armed');
+  mobileChirpReleaseOption.style.setProperty('--hold-progress', '0%');
+}
+
+function cancelMobileChirpHold(pointerId = null) {
+  const hold = mobileChirpHold;
+  if (!hold || (pointerId !== null && hold.pointerId !== pointerId)) return;
+  mobileChirpHold = null;
+  mobileHeavenChirpMenu.cancel();
+  closeMobileChirpMenu();
+  chirpButtons.cancel(hold.key);
+  butterfly.setChirpCharge(0);
+  if (mobileChirpTarget.hasPointerCapture(hold.pointerId)) mobileChirpTarget.releasePointerCapture(hold.pointerId);
+}
+
+function updateMobileControlVisibility(dt) {
+  if (!mobileLayout.matches) {
+    mobileControls.classList.remove('is-hidden');
+    mobileControlVisibility.reset();
+    return;
+  }
+  if (!settingsPanel.hidden || mobileExperienceNotice.open) return;
+  const joystickActive = Object.values(mobileSticks).some(stick => stick.pointerId !== null);
+  const interacting = joystickActive || pointers.size > 0 || mobileChirpHold !== null;
+  mobileControls.classList.toggle('is-hidden', !mobileControlVisibility.update(dt, {
+    joystickActive,
+    interacting,
+  }));
+}
+
+function updateMobileChirpTarget() {
+  if (!mobileLayout.matches || paused || !settingsPanel.hidden || mobileExperienceNotice.open || !butterfly.group.visible) {
+    if (mobileChirpHold?.menuOpen) cancelMobileChirpHold();
+    mobileChirpTarget.hidden = true;
+    return;
+  }
+  camera.updateMatrixWorld();
+  mobileChirpScreen.copy(butterfly.group.position).project(camera);
+  const x = (mobileChirpScreen.x + 1) * .5 * innerWidth;
+  const y = (1 - mobileChirpScreen.y) * .5 * innerHeight;
+  const inView = mobileChirpScreen.z >= -1 && mobileChirpScreen.z <= 1
+    && x >= 0 && x <= innerWidth && y >= 0 && y <= innerHeight;
+  if (!inView) {
+    mobileChirpTarget.hidden = true;
+    return;
+  }
+  mobileChirpTarget.style.left = `${x}px`;
+  mobileChirpTarget.style.top = `${y}px`;
+  mobileChirpTarget.hidden = false;
 }
 
 function updateMobileJoystick(name, event) {
@@ -352,11 +672,58 @@ function resetMobileJoysticks() {
 }
 
 function setSettingsOpen(open) {
+  cancelMobileChirpHold();
   settingsPanel.hidden = !open;
+  settingsPanel.classList.toggle('settings-panel--gear-visible',
+    open && mobileLayout.matches && !mobileSettingsButton.hidden);
+  if (open) mobileSettingsHotspot.hidden = true;
+  else syncMobileSettingsAccess();
   keys.clear(); pointers.clear(); resetMobileJoysticks(); chirpButtons.cancel(); chirpGesture.reset(); resetGamepadInput();
   butterfly.setChirpCharge(0);
+  if (!open && mobileLayout.matches) mobileControlVisibility.interact();
   r3ViewGesture.reset();
   (open ? settingsClose : canvas).focus({ preventScroll: true });
+}
+
+function syncMobileSettingsAccess() {
+  if (!mobileLayout.matches) {
+    clearMobileSettingsGearTimer();
+    mobileSettingsButton.hidden = true;
+    mobileSettingsButton.classList.remove('is-fading');
+    settingsPanel.classList.remove('settings-panel--gear-visible');
+  }
+  const canReveal = mobileLayout.matches && settingsPanel.hidden && !mobileExperienceNotice.open;
+  mobileSettingsHotspot.hidden = !canReveal || !mobileSettingsButton.hidden;
+}
+
+function revealMobileSettingsGear() {
+  if (!mobileLayout.matches || !settingsPanel.hidden || mobileExperienceNotice.open) return;
+  clearMobileSettingsGearTimer();
+  mobileSettingsButton.hidden = false;
+  mobileSettingsButton.classList.remove('is-fading');
+  mobileSettingsHotspot.hidden = true;
+  scheduleMobileSettingsGearHide(5000);
+}
+
+function scheduleMobileSettingsGearHide(delay) {
+  clearMobileSettingsGearTimer();
+  mobileSettingsGearTimer = window.setTimeout(() => {
+    mobileSettingsButton.classList.add('is-fading');
+    mobileSettingsGearTimer = window.setTimeout(hideMobileSettingsGear, 260);
+  }, delay);
+}
+
+function hideMobileSettingsGear() {
+  clearMobileSettingsGearTimer();
+  mobileSettingsButton.hidden = true;
+  mobileSettingsButton.classList.remove('is-fading');
+  settingsPanel.classList.remove('settings-panel--gear-visible');
+  syncMobileSettingsAccess();
+}
+
+function clearMobileSettingsGearTimer() {
+  if (mobileSettingsGearTimer !== null) window.clearTimeout(mobileSettingsGearTimer);
+  mobileSettingsGearTimer = null;
 }
 
 function readGamepadInput(now) {
@@ -390,13 +757,14 @@ function readGamepadInput(now) {
     const pressed = gamepadButton(active, index) > .5, wasPressed = gamepadButtons.get(index) ?? false;
     gamepadButtons.set(index, pressed);
     if (pressed !== wasPressed) dispatchGamepadAction(index, pressed, now, {
-      enabled: !paused && settingsPanel.hidden,
+      enabled: !paused && settingsPanel.hidden && !mobileExperienceNotice.open,
+      heaven: !tunnel.solid,
       toggleSettings: () => setSettingsOpen(settingsPanel.hidden),
       releaseGroup, chirp, chirpButtons,
     });
   }
-  readGamepadMotion(active, gamepadInput, settingsPanel.hidden && !paused);
-  if (r3ViewGesture.update(active, now, settingsPanel.hidden && !paused)) cameraView.toggle();
+  readGamepadMotion(active, gamepadInput, settingsPanel.hidden && !paused && !mobileExperienceNotice.open);
+  if (r3ViewGesture.update(active, now, settingsPanel.hidden && !paused && !mobileExperienceNotice.open)) cameraView.toggle();
   if (r3ViewGesture.suppressZoom) gamepadInput.zoom = 0;
 }
 
@@ -406,7 +774,9 @@ function animate(now) {
   last = now;
   if (document.hidden) return;
   readGamepadInput(now);
-  butterfly.setChirpCharge(!paused && settingsPanel.hidden ? chirpButtons.charge(now) : 0);
+  updateMobileControlVisibility(dt);
+  updateMobileHeavenChirpMenu(now);
+  butterfly.setChirpCharge(!paused && settingsPanel.hidden && !mobileExperienceNotice.open ? chirpButtons.charge(now) : 0);
   const motionDt = paused ? 0 : dt;
   time += motionDt;
   const keyboardRise = Number(keys.has('Space')) - Number(keys.has('AltLeft') || keys.has('AltRight'));
@@ -440,6 +810,7 @@ function animate(now) {
   butterfly.group.position.y += Math.sin(time * 1.3) * .10;
   butterfly.group.quaternion.copy(camera.quaternion);
   butterfly.update(time, !!(rise || forward || sideways));
+  updateMobileChirpTarget();
   tunnel.update(time, player, autonomousButterflies.agents);
   atmosphere.update(tunnel.visibility);
   autonomousButterflies.update(time, player, camera.quaternion, !paused, lateralStep, tunnel.solid);
@@ -450,6 +821,7 @@ function animate(now) {
     skyVideoTextures[skyVideo.previousIndex], skyVideo.blend);
   paradise.update(time, camera.quaternion, player, camera, !tunnel.solid, butterfly.wingbeatStrength,
     autonomousButterflies.boost(time));
+  syncControlsHelp();
   playerLantern.update(butterfly.group.position, camera.quaternion,
     1 + autonomousButterflies.glow(time) * .25, tunnel.visibility, cameraView.blend);
   ambientAudio.update(now);

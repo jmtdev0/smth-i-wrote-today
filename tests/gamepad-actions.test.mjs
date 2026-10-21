@@ -6,7 +6,7 @@ import { createChirpButtons } from '../src/chirpInput.js';
 function fixture() {
   const calls = [], previous = new Map();
   const pad = { buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })) };
-  const state = { enabled: true, menu: false, released: 0, chirp: (...args) => calls.push(args) };
+  const state = { enabled: true, heaven: true, menu: false, released: 0, chirp: (...args) => calls.push(args) };
   state.chirpButtons = createChirpButtons(state.chirp);
   state.toggleSettings = () => {
     state.menu = !state.menu; state.enabled = !state.menu; state.chirpButtons.cancel();
@@ -61,4 +61,15 @@ test('Circle/Square retain independent charged intents and Triangle still releas
   assert.equal(state.released, 1);
   sample(3000, [1]); sample(3200, [1, 9]); sample(3600, []);
   assert.equal(calls.length, 0, 'opening settings cancels a held chirp');
+});
+
+test('Only Circle chirps in the tunnel; Cross and Square remain silent', () => {
+  const { calls, sample, state } = fixture();
+  state.heaven = false;
+  sample(0, [0]); sample(100, []);
+  assert.equal(calls.length, 0, 'Cross must not chirp in the tunnel');
+  sample(200, [2]); sample(900, []);
+  assert.equal(calls.length, 0, 'Square must not chirp in the tunnel');
+  sample(1000, [1]); sample(1600, []);
+  assert.deepEqual(calls, [[.5, { recruit: true }]]);
 });
